@@ -52,12 +52,61 @@ class Device:
         except FileNotFoundError:
             logger.error("adb binary not found when attempting to wake screen.")
 
+    def is_app_running(self, package_name="com.supercell.clashofclans"):
+        """Check if a given app (default: CoC) is currently running (any state)."""
+        if not self.available:
+            return False
+        try:
+            res = subprocess.run(self._adb_cmd(['shell', 'dumpsys', 'activity', 'activities']), 
+                                capture_output=True, text=True)
+            if package_name in res.stdout:
+                logger.debug(f"App {package_name} is running")
+                return True
+            logger.debug(f"App {package_name} is not running")
+            return False
+        except Exception as e:
+            logger.debug(f"Failed to check if app is running: {e}")
+            return False
+
+    def is_app_foreground(self, package_name="com.supercell.clashofclans"):
+        """Check if app is in foreground (active/focused window)."""
+        if not self.available:
+            return False
+        try:
+            res = subprocess.run(self._adb_cmd(['shell', 'dumpsys', 'window', 'windows']), 
+                                capture_output=True, text=True)
+            # Look for mCurrentFocus which shows the currently focused app
+            if package_name in res.stdout and "mCurrentFocus" in res.stdout:
+                # More specific check: see if package appears near mCurrentFocus
+                for line in res.stdout.split('\n'):
+                    if 'mCurrentFocus' in line and package_name in line:
+                        logger.debug(f"App {package_name} is in foreground")
+                        return True
+            logger.debug(f"App {package_name} is NOT in foreground")
+            return False
+        except Exception as e:
+            logger.debug(f"Failed to check if app is foreground: {e}")
+            return False
+
+    def bring_app_to_foreground(self, package_name="com.supercell.clashofclans"):
+        """Bring app to foreground if running but backgrounded."""
+        if not self.available:
+            logger.warning("Cannot bring app to foreground: adb not available.")
+            return
+        logger.info(f"Bringing {package_name} to foreground...")
+        # Use monkey to bring app to foreground
+        subprocess.run(self._adb_cmd(['shell', 'monkey', '-p', package_name, '1']), capture_output=True)
+        time.sleep(2)
+        logger.info("App brought to foreground.")
+
     def launch_game(self):
         if not self.available:
             logger.warning("Cannot launch game: adb not available.")
             return
         package_name = "com.supercell.clashofclans"
+        logger.info(f"Launching {package_name}...")
         subprocess.run(self._adb_cmd(['shell', 'monkey', '-p', package_name, '-c', 'android.intent.category.LAUNCHER', '1']), capture_output=True)
+        logger.info("Waiting for app to load (5 seconds)...")
         time.sleep(5)
 
     def get_screen(self):

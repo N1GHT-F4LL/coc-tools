@@ -3,6 +3,7 @@ import time
 import cv2
 import os
 import logging
+from datetime import datetime
 from core.humanize import Humanize
 from core.ui_manager import UIManager
 from core.vision import vision
@@ -32,9 +33,33 @@ def main():
     # Optionally perform connection checks / wake here.
     device._check_connection()
 
+    # Check if CoC is running and in foreground; launch or bring to foreground if needed
+    logger.info("Checking Clash of Clans status...")
+    coc_package = "com.supercell.clashofclans"
+    
+    if device.is_app_running(coc_package):
+        logger.info("CoC is running.")
+        if not device.is_app_foreground(coc_package):
+            logger.warning("CoC is running but in background. Bringing to foreground...")
+            device.bring_app_to_foreground(coc_package)
+    else:
+        logger.warning("CoC is not running. Launching game...")
+        device.launch_game()
+
     ui_manager = UIManager(humanize, device)
 
     vision.load_assets("coc_bot/assets")
+    
+    # Capture initial screen for debugging
+    logger.info("Capturing initial screen for debugging...")
+    initial_screen = device.get_screen()
+    if initial_screen is not None:
+        debug_dir = os.path.join('coc_bot', 'logs', 'debug')
+        os.makedirs(debug_dir, exist_ok=True)
+        ts = datetime.now().strftime('%Y%m%d_%H%M%S')
+        debug_path = os.path.join(debug_dir, f"initial_screen_{ts}.png")
+        cv2.imwrite(debug_path, initial_screen)
+        logger.info(f"Initial screen saved: {debug_path}")
 
     home_screen = HomeScreen(ui_manager)
     logger.info("Bot starting main loop...")
