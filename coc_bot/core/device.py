@@ -6,9 +6,9 @@ import time
 class Device:
     def __init__(self, serial=None):
         self.serial = serial
-        self._check_connection()
-        self.wake_screen()
-        # self.launch_game() # Commented out so it doesn't interrupt your current screen
+        # Note: avoid performing heavy side-effects at import-time.
+        # Initialization will not automatically check connection or wake the
+        # screen; callers should invoke those explicitly if desired.
 
     def _adb_cmd(self, args):
         cmd = ['adb']
@@ -53,4 +53,6 @@ class Device:
 
 # By default, serial is None, which means ADB uses the only connected device.
 # Change this to e.g., device = Device("emulator-5554") if you have multiple devices.
-device = Device()
+# To use the device, create an instance in your runtime entrypoint (e.g. `main.py`):
+# from core.device import Device
+# device = Device()

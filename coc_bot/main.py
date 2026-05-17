@@ -5,7 +5,7 @@ import os
 from core.humanize import Humanize
 from core.ui_manager import UIManager
 from core.vision import vision
-from core.device import device
+from core.device import Device
 from screens.home_screen import HomeScreen
 
 def load_settings():
@@ -15,10 +15,18 @@ def load_settings():
 def main():
     settings = load_settings()
     humanize = Humanize(settings)
-    ui_manager = UIManager(humanize)
-    
+    # Instantiate device at runtime to avoid import-time side-effects.
+    device = Device()
+    # Optionally perform connection checks / wake here.
+    try:
+        device._check_connection()
+    except Exception:
+        pass
+
+    ui_manager = UIManager(humanize, device)
+
     vision.load_assets("coc_bot/assets")
-    
+
     home_screen = HomeScreen(ui_manager)
     print("\nBot starting main loop...")
     loop_count = 0

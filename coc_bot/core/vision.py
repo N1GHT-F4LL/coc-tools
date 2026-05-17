@@ -13,9 +13,14 @@ class Vision:
         count = 0
         for path in base_path.rglob('*.png'):
             name = path.stem
+            # Use both stem and relative path (namespace) as keys to avoid
+            # accidental overwrites while remaining backward compatible.
+            rel_key = path.relative_to(base_path).with_suffix('').as_posix()
             img = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE)
             if img is not None:
-                self.cache[name] = img
+                if name not in self.cache:
+                    self.cache[name] = img
+                self.cache[rel_key] = img
                 count += 1
         print(f"Loaded {count} assets into RAM.")
 
