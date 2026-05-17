@@ -63,12 +63,32 @@ def main():
 
     home_screen = HomeScreen(ui_manager)
     logger.info("Bot starting main loop...")
+    
+    # Wait for home screen to load and stabilize
+    logger.info("Waiting for home screen to load...")
+    max_wait = 10
+    start_wait = time.time()
+    while time.time() - start_wait < max_wait:
+        if home_screen.is_current_screen():
+            logger.info("Home screen detected!")
+            break
+        logger.info("Not on home screen yet, waiting...")
+        time.sleep(1)
+    else:
+        logger.warning(f"Home screen not detected after {max_wait} seconds. Continuing anyway...")
+    
+    # Main bot loop
     loop_count = 0
     while loop_count < 3:
         logger.info(f"--- Loop {loop_count} ---")
+        
+        # Close any popups if present
+        logger.info("Attempting to close popups...")
         home_screen.close_popups()
+        
+        # Check home screen and perform actions
         if home_screen.is_current_screen():
-            logger.info("On Home Screen. Collecting...")
+            logger.info("On Home Screen. Collecting resources...")
             home_screen.collect_resources()
         else:
             logger.warning("Not on home screen, attempting recovery...")

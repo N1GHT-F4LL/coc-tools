@@ -12,8 +12,20 @@ class UIManager:
         self.humanize = humanize
         self.device = device
 
-    def wait_until_appears(self, template_name, timeout=5): 
-        logger.info(f"Waiting for '{template_name}'...")
+    def wait_until_appears(self, template_name, timeout=5, silent=False): 
+        """
+        Wait for template to appear on screen.
+        
+        Args:
+            template_name: Name of the template to find
+            timeout: How long to wait in seconds
+            silent: If True, only log at debug level (no warning on timeout)
+        """
+        if not silent:
+            logger.info(f"Waiting for '{template_name}'...")
+        else:
+            logger.debug(f"Waiting for '{template_name}'...")
+        
         start = time.time()
         while time.time() - start < timeout:
             screen = self.device.get_screen()
@@ -26,7 +38,12 @@ class UIManager:
                 logger.info(f"Found '{template_name}' at {loc} in {time.time() - start:.1f}s")
                 return loc
             time.sleep(0.5)
-        logger.warning(f"Timeout waiting for '{template_name}'")
+        
+        if not silent:
+            logger.warning(f"Timeout waiting for '{template_name}'")
+        else:
+            logger.debug(f"Timeout waiting for '{template_name}'")
+        
         # Save debug screenshot for post-mortem
         try:
             debug_dir = os.path.join('coc_bot', 'logs', 'debug')
@@ -36,7 +53,7 @@ class UIManager:
                 ts = datetime.now().strftime('%Y%m%d_%H%M%S')
                 out_path = os.path.join(debug_dir, f"timeout_{template_name}_{ts}.png")
                 cv2.imwrite(out_path, last_screen)
-                logger.info(f"Wrote debug screenshot: {out_path}")
+                logger.debug(f"Wrote debug screenshot: {out_path}")
         except Exception as e:
             logger.exception(f"Failed to write debug screenshot: {e}")
         return None
@@ -46,7 +63,17 @@ class UIManager:
         logger.debug(f"Tapping {jx}, {jy}")
         self.device.tap(jx, jy)
 
+    def click_if_exists_quick(self, template_name, timeout=0.3):
+        """Quick click if element exists (for popup scanning with minimal wait)."""
+        logger.debug(f"Quick checking if '{template_name}' exists...")
+        loc = self.wait_until_appears(template_name, timeout=timeout, silent=True)
+        if loc:
+            self.click(loc[0], loc[1])
+            return True
+        return False
+
     def click_if_exists(self, template_name):
+        """Check if element exists and click it."""
         logger.debug(f"Checking if '{template_name}' exists...")
         loc = self.wait_until_appears(template_name, timeout=1)
         if loc:

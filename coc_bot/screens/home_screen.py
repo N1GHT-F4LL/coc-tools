@@ -1,12 +1,29 @@
 from .base_screen import BaseScreen
+import logging
+
+logger = logging.getLogger(__name__)
 
 class HomeScreen(BaseScreen):
     def is_current_screen(self):
-        # Màn hình chính nhận diện bằng nút Attack
-        return self.ui_manager.wait_until_appears("icon_attack", timeout=2) is not None
+        """
+        Detect if we're on the home screen by checking for characteristic UI elements.
+        Home screen typically has Attack button and resource displays.
+        """
+        # Try multiple anchor images to detect home screen
+        anchors = ["icon_attack", "btn_attack", "attack"]
+        
+        for anchor in anchors:
+            loc = self.ui_manager.wait_until_appears(anchor, timeout=1)
+            if loc:
+                logger.debug(f"Home screen detected via {anchor} at {loc}")
+                return True
+        
+        logger.debug("Home screen not detected")
+        return False
 
     def collect_resources(self):
-        print("Collecting resources...")
+        """Collect resources from gold mine, elixir collector, dark elixir drill."""
+        logger.info("Collecting resources...")
         # Tìm và click mỏ vàng/elixir
         self.ui_manager.click_if_exists("icon_gold_mine_full")
         self.ui_manager.click_if_exists("icon_elixir_collector_full")
