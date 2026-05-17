@@ -2,13 +2,16 @@ import cv2
 import numpy as np
 import os
 from pathlib import Path
+import logging
+
+logger = logging.getLogger(__name__)
 
 class Vision:
     def __init__(self):
         self.cache = {}
 
     def load_assets(self, asset_dir="assets"):
-        print(f"Loading assets from {asset_dir} into RAM cache...")
+        logger.info(f"Loading assets from {asset_dir} into RAM cache...")
         base_path = Path(asset_dir)
         count = 0
         for path in base_path.rglob('*.png'):
@@ -22,7 +25,7 @@ class Vision:
                     self.cache[name] = img
                 self.cache[rel_key] = img
                 count += 1
-        print(f"Loaded {count} assets into RAM.")
+        logger.info(f"Loaded {count} assets into RAM.")
 
     def find_template(self, screen_color, template_name, threshold=0.7):
         if template_name not in self.cache or screen_color is None:

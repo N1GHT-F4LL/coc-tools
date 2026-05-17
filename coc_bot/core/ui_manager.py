@@ -1,4 +1,7 @@
 import time
+import os
+from datetime import datetime
+import cv2
 from .vision import vision
 
 class UIManager:
@@ -21,6 +24,18 @@ class UIManager:
                 return loc
             time.sleep(0.5)
         print(f"Timeout waiting for '{template_name}'")
+        # Save debug screenshot for post-mortem
+        try:
+            debug_dir = os.path.join('coc_bot', 'logs', 'debug')
+            os.makedirs(debug_dir, exist_ok=True)
+            last_screen = self.device.get_screen()
+            if last_screen is not None:
+                ts = datetime.now().strftime('%Y%m%d_%H%M%S')
+                out_path = os.path.join(debug_dir, f"timeout_{template_name}_{ts}.png")
+                cv2.imwrite(out_path, last_screen)
+                print(f"Wrote debug screenshot: {out_path}")
+        except Exception as e:
+            print(f"Failed to write debug screenshot: {e}")
         return None
 
     def click(self, x, y):
