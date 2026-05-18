@@ -520,10 +520,58 @@ def run_device_setup_wizard(device, settings, save_settings, logger):
     logger.info(f"Device selected and saved: {selected_serial}")
     return True
 
+def choose_profile_interactive(settings, save_settings, logger):
+    device_cfg = settings.setdefault("device", {})
+    current_profile = device_cfg.get("profile", "usb_or_existing")
+    profile_options = [
+        ("ldplayer", "LDPlayer"),
+        ("bluestacks", "BlueStacks"),
+        ("nox", "Nox"),
+        ("mumu", "MuMu"),
+        ("android_emulator", "Android Emulator"),
+        ("usb_or_existing", "USB / Already listed in adb devices"),
+        ("custom_endpoint", "Custom ADB endpoint (ip:port)"),
+    ]
+    label_map = {key: label for key, label in profile_options}
+    current_label = label_map.get(current_profile, current_profile)
+
+    logger.info(f"Current profile: {current_label}")
+    choice_mode = input("Press Enter to continue, or type 'c' to change profile: ").strip().lower()
+    if choice_mode != "c":
+        return current_profile
+
+    for idx, (_, label) in enumerate(profile_options, 1):
+        logger.info(f"{idx}. {label}")
+
+    raw = input(f"Select profile [1-{len(profile_options)}] (Enter={current_label}): ").strip()
+    if not raw:
+        return current_profile
+    if not raw.isdigit() or not (1 <= int(raw) <= len(profile_options)):
+        logger.warning("Invalid profile choice. Using default profile from settings.")
+        return current_profile
+
+    selected_profile = profile_options[int(raw) - 1][0]
+    if selected_profile != current_profile:
+        device_cfg["profile"] = selected_profile
+        device_cfg["serial"] = ""
+        if selected_profile != "custom_endpoint":
+            device_cfg["endpoint"] = ""
+        save_settings(settings)
+        logger.info(f"Profile switched to: {selected_profile}")
+
+    if selected_profile == "custom_endpoint":
+        endpoint = input("Enter endpoint (example 127.0.0.1:5555, Enter=keep current): ").strip()
+        if endpoint:
+            device_cfg["endpoint"] = endpoint
+            save_settings(settings)
+
+    return device_cfg.get("profile", selected_profile)
+
 
 def bootstrap_device(settings, save_settings, logger):
     device_cfg = settings.get("device", {})
-    profile = device_cfg.get("profile", "usb_or_existing")
+    profile = choose_profile_interactive(settings, save_settings, logger)
+    device_cfg = settings.get("device", {})
     endpoint = device_cfg.get("endpoint", "")
     preferred_serial = device_cfg.get("serial")
     auto_select_single = device_cfg.get("auto_select_single", True)
