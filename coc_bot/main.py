@@ -10,11 +10,10 @@ from core.vision import vision
 from core.device import bootstrap_device
 from core.logging_utils import setup_logging
 from screens.home_screen import HomeScreen
+from screens.attack_screen import AttackScreen
 
 SETTINGS_PATH = "coc_bot/settings.json"
 COC_PACKAGE = "com.supercell.clashofclans"
-# Replaced by battle duration once the attack phase is implemented.
-IDLE_CYCLE_SLEEP = 30
 HOME_DETECT_MAX_MISSES = 2
 
 
@@ -57,6 +56,7 @@ def main():
         return
 
     home_screen = HomeScreen(ui_manager)
+    attack_screen = AttackScreen(ui_manager, settings)
 
     logger.info("Waiting for home screen to load...")
     deadline = time.time() + 10
@@ -106,12 +106,9 @@ def main():
                 continue
 
             home_screen.collect_resources()
+            attack_screen.run_attack_cycle()
 
-            # TODO: implement attack cycle
-            # attack_screen.run_attack_cycle()
-
-            logger.info(f"Cycle {cycle} complete. Next cycle in {IDLE_CYCLE_SLEEP}s...")
-            time.sleep(IDLE_CYCLE_SLEEP)
+            logger.info(f"Cycle {cycle} complete.")
 
     except KeyboardInterrupt:
         logger.info("Bot stopped by user (Ctrl+C).")
