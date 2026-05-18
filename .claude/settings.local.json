@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(adb devices *)",
+      "Bash(adb -s emulator-5554 shell getprop ro.build.version.release)",
+      "Bash(adb -s emulator-5554 shell getprop ro.build.version.sdk)",
+      "Bash(adb -s emulator-5554 shell getprop ro.product.model)",
+      "Bash(adb -s emulator-5554 shell pm list packages)",
+      "Bash(adb connect *)",
+      "Bash(adb -s 127.0.0.1:5555 shell id)",
+      "Bash(adb -s 127.0.0.1:5555 shell pm list packages)",
+      "Bash(adb -s emulator-5554 shell id)",
+      "Bash(adb -s emulator-5554 shell pidof com.supercell.clashofclans)",
+      "Bash(adb -s emulator-5554 shell \"echo hello\")",
+      "Bash(adb kill-server *)",
+      "Bash(adb start-server *)",
+      "Bash(adb -s emulator-5554 shell ps)",
+      "Bash(adb -s emulator-5554 shell \"ps -A\")",
+      "Bash(adb -s emulator-5554 shell dumpsys window windows)",
+      "Bash(adb -s emulator-5554 shell cmd package resolve-activity --brief com.supercell.clashofclans)",
+      "Bash(adb -s emulator-5554 shell am start -n com.supercell.clashofclans/com.supercell.titan.GameApp)",
+      "Bash(python *)",
+      "Bash(.venv/Scripts/python.exe *)"
+    ]
+  }
+}

@@ -1,8 +1,10 @@
 {
   "device": {
     "profile": "bluestacks",
+    "adb_path": "",
     "endpoint": "",
     "serial": "127.0.0.1:5555",
+    "strict_serial": true,
     "auto_select_single": true,
     "auto_launch_profile": true
   },

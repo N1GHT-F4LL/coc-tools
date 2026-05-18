@@ -36,21 +36,8 @@ def main():
 
     logger.info("Checking Clash of Clans status...")
     coc_package = "com.supercell.clashofclans"
-    if not device.is_package_installed(coc_package):
-        logger.error("Clash of Clans is not installed on the selected emulator/device. Please install it, then run the bot again.")
+    if not device.ensure_coc_ready(coc_package, settings, save_settings, logger):
         return
-
-    if device.is_app_running(coc_package):
-        logger.info("CoC is running.")
-        if not device.is_app_foreground(coc_package):
-            logger.warning("CoC is running but in background. Bringing to foreground...")
-            if not device.bring_app_to_foreground(coc_package):
-                logger.error("CoC is running but cannot be brought to foreground. Stop bot.")
-                return
-    else:
-        logger.warning("CoC is not running. Launching game...")
-        if not device.launch_game(coc_package):
-            return
 
     ui_manager = UIManager(humanize, device)
     vision.load_assets("coc_bot/assets")

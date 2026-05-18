@@ -46,14 +46,22 @@ PROFILE_PROCESS_NAMES = {
     "android_emulator": ["emulator.exe"],
 }
 
+
+COC_MAIN_ACTIVITY = "com.supercell.titan.GameApp"
+
 class Device:
-    def __init__(self, serial=None):
+    def __init__(self, serial=None, strict_serial=True, adb_path=None, profile=None, endpoint=None):
         self.serial = serial
+        self.strict_serial = strict_serial
         # Detect adb binary path early to avoid FileNotFoundError on subprocess.
-        self.adb_path = shutil.which("adb")
+        self.adb_path = adb_path or shutil.which("adb")
         self.available = bool(self.adb_path)
         self.connected = False
         self.last_status_reason = "unknown"
+        # Stored so the transparent shell-recovery path can reconnect the
+        # right endpoints after kill-server/start-server.
+        self.profile = profile
+        self.endpoint = endpoint
         if not self.available:
             logger.warning("'adb' not found in PATH. Device operations will be disabled.")
             logger.info("To enable device control, install Android platform-tools and add 'adb' to your PATH.")
@@ -70,19 +78,148 @@ class Device:
         cmd.extend(args)
         return cmd
 
-    def _run_adb(self, args, text=True):
+    def _run_adb(self, args, text=True, _recovered=False):
         if not self.available:
             return None
         try:
-            return subprocess.run(
+            res = subprocess.run(
                 self._adb_cmd(args),
                 capture_output=True,
                 text=text,
             )
+            # Auto-failover for flaky BlueStacks ADB transport.
+            # If current serial shell is closed, try other ready serials.
+            if (not self.strict_serial) and args and args[0] == 'shell' and self._is_shell_transport_closed(res):
+                failover = self._run_shell_with_failover(args, text=text)
+                if failover is not None:
+                    return failover
+            # Transparent transport recovery: shell-closed is a known BlueStacks
+            # quirk that survives across calls until the adb server is restarted.
+            # Try once per command to kick the transport and retry.
+            if (not _recovered) and args and args[0] == 'shell' and self._is_shell_transport_closed(res):
+                logger.warning("ADB shell transport closed. Attempting recovery (kill-server/start-server)...")
+                if self.try_recover_adb_transport(profile=self.profile, endpoint=self.endpoint):
+                    return self._run_adb(args, text=text, _recovered=True)
+            return res
         except FileNotFoundError:
             self.connected = False
             self.last_status_reason = "adb_missing"
             return None
+
+    def _is_shell_transport_closed(self, res):
+        if res is None:
+            return False
+        msg = ((res.stdout or "") + " " + (res.stderr or "")).lower()
+        return "error: closed" in msg or "device not found" in msg
+
+    def _list_ready_serials_raw(self):
+        """
+        Read ready device serials directly from `adb devices` without using self.serial.
+        """
+        if not self.available:
+            return []
+        try:
+            res = subprocess.run([self.adb_path, 'devices'], capture_output=True, text=True)
+        except Exception:
+            return []
+        if res.returncode != 0:
+            return []
+        serials = []
+        for line in (res.stdout or "").splitlines()[1:]:
+            line = line.strip()
+            if not line:
+                continue
+            parts = line.split()
+            if len(parts) >= 2 and parts[1] == "device":
+                serials.append(parts[0])
+        return serials
+
+    def shell_health_check(self, serial=None):
+        """
+        Check whether adb shell is usable for a serial.
+        """
+        if not self.available:
+            return False
+        target = serial or self.serial
+        if not target:
+            return False
+        for _ in range(3):
+            try:
+                res = subprocess.run(
+                    [self.adb_path, "-s", target, "shell", "id"],
+                    capture_output=True,
+                    text=True,
+                )
+            except Exception:
+                continue
+            if res.returncode != 0:
+                time.sleep(0.2)
+                continue
+            out = ((res.stdout or "") + " " + (res.stderr or "")).lower()
+            if "uid=" in out and "error: closed" not in out:
+                return True
+            time.sleep(0.2)
+        return False
+
+    def pick_healthy_serial(self, preferred_serial=None):
+        """
+        Choose the best serial by shell health.
+        """
+        ready = self._list_ready_serials_raw()
+        if not ready:
+            return None
+
+        # Prefer configured serial if its shell is healthy.
+        if preferred_serial and preferred_serial in ready and self.shell_health_check(preferred_serial):
+            return preferred_serial
+
+        # Otherwise pick first healthy serial.
+        for serial in ready:
+            if self.shell_health_check(serial):
+                return serial
+        return None
+
+    def try_recover_adb_transport(self, profile=None, endpoint=None):
+        """
+        Best-effort transport recovery for flaky emulator ADB shell.
+        """
+        if not self.available:
+            return False
+        try:
+            subprocess.run([self.adb_path, "kill-server"], capture_output=True, text=True)
+            subprocess.run([self.adb_path, "start-server"], capture_output=True, text=True)
+            if endpoint:
+                subprocess.run([self.adb_path, "connect", endpoint], capture_output=True, text=True)
+            if profile and profile in PROFILE_ENDPOINTS:
+                for ep in PROFILE_ENDPOINTS.get(profile, []):
+                    subprocess.run([self.adb_path, "connect", ep], capture_output=True, text=True)
+        except Exception:
+            return False
+        time.sleep(0.5)
+        return True
+
+    def _run_shell_with_failover(self, shell_args, text=True):
+        """
+        Try shell command on alternative ready serials when current serial transport is closed.
+        """
+        candidates = self._list_ready_serials_raw()
+        if not candidates:
+            return None
+
+        current = self.serial
+        for serial in candidates:
+            if serial == current:
+                continue
+            try:
+                cmd = [self.adb_path, '-s', serial] + shell_args
+                res = subprocess.run(cmd, capture_output=True, text=text)
+            except Exception:
+                continue
+            if res.returncode == 0 and not self._is_shell_transport_closed(res):
+                self.serial = serial
+                logger.warning(f"ADB shell transport on '{current}' was closed. Switched to '{serial}'.")
+                return res
+        return None
 
     def _has_usable_device(self, devices_output):
         lines = [line.strip() for line in devices_output.splitlines()[1:] if line.strip()]
@@ -125,6 +262,24 @@ class Device:
             if len(parts) >= 2:
                 devices.append({"serial": parts[0], "state": parts[1]})
         return devices
+
+    def find_serial_with_package(self, package_name):
+        """
+        Try all ready ADB devices and return first serial where package is installed.
+        Returns None if not found or package state cannot be verified.
+        """
+        devices = self.list_devices()
+        ready = [d["serial"] for d in devices if d.get("state") == "device"]
+        original_serial = self.serial
+        try:
+            for serial in ready:
+                self.serial = serial
+                state = self.is_package_installed(package_name)
+                if state is True:
+                    return serial
+        finally:
+            self.serial = original_serial
+        return None
 
     def start_adb_server(self):
         if not self.available:
@@ -276,6 +431,25 @@ class Device:
             logger.debug(f"Failed to check if app is foreground: {e}")
             return False
 
+    def resolve_launch_component(self, package_name):
+        """
+        Resolve best launcher component for a package.
+        Returns component string: <package>/<activity> or None.
+        """
+        if not self.available or not self.connected:
+            return None
+
+        # Preferred: package manager resolver.
+        res = self._run_adb(['shell', 'cmd', 'package', 'resolve-activity', '--brief', package_name])
+        if res is not None and res.returncode == 0:
+            for line in reversed((res.stdout or "").splitlines()):
+                line = line.strip()
+                if line.startswith(package_name + "/"):
+                    return line
+
+        # Fallback for environments where cmd package is unreliable.
+        return f"{package_name}/{COC_MAIN_ACTIVITY}"
+
     def bring_app_to_foreground(self, package_name="com.supercell.clashofclans"):
         """Bring app to foreground if running but backgrounded."""
         if not self.available or not self.connected:
@@ -283,6 +457,14 @@ class Device:
             return False
 
         logger.info(f"Bringing {package_name} to foreground...")
+        component = self.resolve_launch_component(package_name)
+
+        # Strategy 0: explicit known launcher activity (most reliable for CoC).
+        if component:
+            self._run_adb(['shell', 'am', 'start', '-n', component])
+            time.sleep(2)
+            if self.is_app_foreground(package_name):
+                return True
 
         # Strategy 1: monkey quick launch
         self._run_adb(['shell', 'monkey', '-p', package_name, '1'])
@@ -291,7 +473,10 @@ class Device:
             return True
 
         # Strategy 2: launcher intent
-        self._run_adb(['shell', 'am', 'start', '-a', 'android.intent.action.MAIN', '-c', 'android.intent.category.LAUNCHER', '-n', f'{package_name}/{package_name}.GameApp'])
+        if component:
+            self._run_adb(['shell', 'am', 'start', '-a', 'android.intent.action.MAIN', '-c', 'android.intent.category.LAUNCHER', '-n', component])
+        else:
+            self._run_adb(['shell', 'am', 'start', '-a', 'android.intent.action.MAIN', '-c', 'android.intent.category.LAUNCHER', '-p', package_name])
         time.sleep(2)
         if self.is_app_foreground(package_name):
             return True
@@ -301,22 +486,49 @@ class Device:
 
     def is_package_installed(self, package_name):
         if not self.available or not self.connected:
-            return False
+            return None
+        # Primary check.
         res = self._run_adb(['shell', 'pm', 'list', 'packages', package_name])
-        if res is None:
+        if res is not None and res.returncode == 0 and package_name in (res.stdout or ""):
+            return True
+
+        # Fallback: some BlueStacks builds intermittently close pm shell command.
+        res_ds = self._run_adb(['shell', 'dumpsys', 'package', package_name])
+        if res_ds is None:
+            self.last_status_reason = "package_check_unavailable"
+            return None
+        if res_ds.returncode != 0:
+            if self._is_shell_transport_closed(res) or self._is_shell_transport_closed(res_ds):
+                self.last_status_reason = "adb_shell_closed"
+                return None
             return False
-        return package_name in (res.stdout or "")
+        out = res_ds.stdout or ""
+        return f"Package [{package_name}]" in out or f"package={package_name}" in out
 
     def launch_game(self, package_name="com.supercell.clashofclans"):
         if not self.available or not self.connected:
             logger.warning("Cannot launch game: no active ADB device.")
             return False
 
-        if not self.is_package_installed(package_name):
+        install_state = self.is_package_installed(package_name)
+        if install_state is None:
+            logger.error("Cannot verify app installation due to unstable ADB shell connection (error: closed).")
+            logger.error("Please restart BlueStacks and ADB, then run the bot again.")
+            return False
+        if not install_state:
             logger.error("Clash of Clans is not installed on the selected emulator/device. Please install it, then run the bot again.")
             return False
 
         logger.info(f"Launching {package_name}...")
+        component = self.resolve_launch_component(package_name)
+
+        # Strategy 0: explicit known activity
+        if component:
+            self._run_adb(['shell', 'am', 'start', '-n', component])
+            time.sleep(4)
+            if self.is_app_running(package_name):
+                return True
+
         # Strategy 1: monkey launcher
         self._run_adb(['shell', 'monkey', '-p', package_name, '-c', 'android.intent.category.LAUNCHER', '1'])
         time.sleep(4)
@@ -330,12 +542,63 @@ class Device:
             return True
 
         # Strategy 3: explicit launch intent
-        self._run_adb(['shell', 'am', 'start', '-a', 'android.intent.action.MAIN', '-c', 'android.intent.category.LAUNCHER', '-n', f'{package_name}/{package_name}.GameApp'])
+        if component:
+            self._run_adb(['shell', 'am', 'start', '-a', 'android.intent.action.MAIN', '-c', 'android.intent.category.LAUNCHER', '-n', component])
+        else:
+            self._run_adb(['shell', 'am', 'start', '-a', 'android.intent.action.MAIN', '-c', 'android.intent.category.LAUNCHER', '-p', package_name])
         time.sleep(4)
         if self.is_app_running(package_name):
             return True
 
         logger.error("Launch attempts completed but app is still not running.")
+        return False
+
+    def ensure_coc_ready(self, package_name, settings, save_settings, logger):
+        """
+        Ensure CoC is installed, launched, and foregrounded.
+        Returns True when ready, False otherwise.
+        """
+        install_state = self.is_package_installed(package_name)
+        if install_state is None:
+            logger.error("Cannot verify Clash of Clans installation because ADB shell connection is unstable.")
+            logger.error("Action: restart BlueStacks, then run `adb kill-server`, `adb start-server`, and run the bot again.")
+            return False
+
+        if not install_state:
+            alt_serial = self.find_serial_with_package(package_name)
+            if alt_serial and alt_serial != self.serial:
+                logger.warning(f"CoC not found on current serial. Switching to: {alt_serial}")
+                self.serial = alt_serial
+                settings.setdefault("device", {})
+                settings["device"]["serial"] = alt_serial
+                save_settings(settings)
+                install_state = self.is_package_installed(package_name)
+
+            if not install_state:
+                logger.error("Clash of Clans is not installed on the selected emulator/device. Please install it, then run the bot again.")
+                return False
+
+        if self.is_app_running(package_name):
+            logger.info("CoC is running.")
+            if not self.is_app_foreground(package_name):
+                logger.warning("CoC is running but in background. Bringing to foreground...")
+                if not self.bring_app_to_foreground(package_name):
+                    logger.error("CoC is running but cannot be brought to foreground. Stop bot.")
+                    return False
+            return True
+
+        logger.warning("CoC is not running. Launching game...")
+        if self.launch_game(package_name):
+            return True
+
+        alt_serial = self.find_serial_with_package(package_name)
+        if alt_serial and alt_serial != self.serial:
+            logger.warning(f"Launch failed on current serial. Trying fallback serial: {alt_serial}")
+            self.serial = alt_serial
+            settings.setdefault("device", {})
+            settings["device"]["serial"] = alt_serial
+            save_settings(settings)
+            return self.launch_game(package_name)
         return False
 
     def get_screen(self):
@@ -592,8 +855,17 @@ def bootstrap_device(settings, save_settings, logger):
     endpoint = device_cfg.get("endpoint", "")
     preferred_serial = device_cfg.get("serial")
     auto_select_single = device_cfg.get("auto_select_single", True)
+    strict_serial = device_cfg.get("strict_serial", True)
+    configured_adb_path = device_cfg.get("adb_path", "")
+    adb_path = configured_adb_path or None
 
-    device = Device(serial=preferred_serial)
+    device = Device(
+        serial=preferred_serial,
+        strict_serial=strict_serial,
+        adb_path=adb_path,
+        profile=profile,
+        endpoint=endpoint,
+    )
     if not getattr(device, "available", False):
         logger.error("\n' adb' not found in your PATH. The bot requires adb to interact with a device.")
         logger.error("Install Android platform-tools and ensure 'adb' is on your PATH, then re-run this script.")
@@ -605,6 +877,24 @@ def bootstrap_device(settings, save_settings, logger):
 
     connect_with_profile(device, profile, endpoint)
     time.sleep(0.5)
+
+    # Choose a shell-healthy serial to avoid BlueStacks dual-endpoint instability.
+    healthy = device.pick_healthy_serial(preferred_serial=device.serial)
+    if not healthy:
+        logger.warning("No healthy ADB shell serial detected. Attempting ADB transport recovery...")
+        device.try_recover_adb_transport(profile=profile, endpoint=endpoint)
+        healthy = device.pick_healthy_serial(preferred_serial=device.serial)
+
+    if healthy and healthy != device.serial:
+        logger.warning(f"Configured serial is unstable. Switching to healthy serial: {healthy}")
+        device.serial = healthy
+        settings.setdefault("device", {})
+        settings["device"]["serial"] = healthy
+        save_settings(settings)
+    elif not healthy:
+        logger.error("ADB shell transport is unstable on all detected serials.")
+        logger.error("Please restart BlueStacks instance and run the bot again.")
+        return None
 
     if not device.select_device(preferred_serial=preferred_serial, auto_select_single=auto_select_single):
         logger.error("Could not resolve target device from settings.")
