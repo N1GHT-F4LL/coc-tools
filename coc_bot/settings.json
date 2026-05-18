@@ -28,9 +28,9 @@
   "attack": {
     "loot_regions": {
       "_note": "Pixel regions [x1,y1,x2,y2] for loot OCR on enemy base preview at 1600x900. Calibrate with: python scripts/probe_and_crop.py crop x1 y1 x2 y2 <name>",
-      "gold":       [330, 38, 520, 72],
-      "elixir":     [330, 82, 520, 116],
-      "dark_elixir":[330, 126, 520, 160]
+      "gold":       [62, 88, 250, 126],
+      "elixir":     [62, 122, 250, 160],
+      "dark_elixir":[62, 156, 250, 194]
     },
     "deploy": {
       "_note": "Deployment sweep along the bottom edge of the battlefield at 1600x900.",

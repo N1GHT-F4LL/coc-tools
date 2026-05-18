@@ -28,8 +28,8 @@ def capture_high_res():
         pipe.communicate()
         
     print(f"Done! Open {filename} in an image editor.")
-    print("Crop the buttons (Shop, Close, Gold Mine, etc.) and save them as PNGs in:")
-    print("  coc_bot/assets/ui/")
+    print("Crop the buttons/buildings and save them as PNGs in:")
+    print("  coc_bot/assets/buttons/")
     print("  coc_bot/assets/buildings/")
 
 if __name__ == "__main__":

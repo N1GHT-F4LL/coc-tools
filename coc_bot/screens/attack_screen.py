@@ -12,13 +12,19 @@ MAX_SKIP = 50
 DEPLOY_TAP_INTERVAL = 0.15
 # Seconds to wait for a battle to fully resolve before timing out.
 BATTLE_TIMEOUT = 180
+LOOT_BOUNDS = {
+    "gold": (0, 3000000),
+    "elixir": (0, 3000000),
+    "dark_elixir": (0, 50000),
+}
 
 FIND_A_MATCH_TEMPLATES = (
     "buttons/attack/btn_find_a_match",
 )
 NEXT_ENEMY_TEMPLATES = ("buttons/attack/btn_next_enemy",)
-ATTACK_CONFIRM_TEMPLATES = (
-    "buttons/attack/btn_attack",
+START_MATCH_TEMPLATES = ("buttons/attack/btn_attack",)
+SCOUT_READY_TEMPLATES = (
+    "buttons/attack/btn_next_enemy",
 )
 RETURN_HOME_TEMPLATES = (
     "buttons/battle/btn_return_home",
@@ -48,6 +54,8 @@ class AttackScreen(BaseScreen):
         """
         farm = self.settings.get("farm", {})
         attack_cfg = self.settings.get("attack", {})
+        # Correct game flow:
+        # Home Attack -> Find a Match -> Attack! (start matchmaking) -> Scout -> OCR/Next.
 
         # --- step 1: tap the Attack! button on the home screen ---
         loc = self.ui_manager.wait_until_appears(
@@ -74,13 +82,29 @@ class AttackScreen(BaseScreen):
             self._bail()
             return
 
+        self.ui_manager.click(*loc)
+        logger.info("Tapped Find a Match.")
+
+        # Step 3: tap green Attack! button to start finding an opponent.
+        if not self._tap_start_match_attack():
+            logger.warning("Start-match Attack button not found after Find a Match - bailing.")
+            self._bail()
+            return
+
+        # Wait until matchmaking lands on a real opponent scout screen.
+        scout_loc = self._wait_until_any_appears(
+            SCOUT_READY_TEMPLATES,
+            timeout=35,
+            use_orb_fallback=False,
+        )
+        if not scout_loc:
+            logger.warning("Scout screen not detected after Find a Match - bailing.")
+            self._bail()
+            return
         skips = 0
         while skips <= MAX_SKIP:
-            self.ui_manager.click(*loc)
-            logger.info("Searching for enemy base..." if skips else "Tapped Find a Match.")
-
-            # Allow the enemy base preview to load before reading loot.
-            time.sleep(2.5)
+            # Ensure scout UI has settled before OCR.
+            time.sleep(1.0)
 
             screen = self.ui_manager.device.get_screen()
             if screen is None:
@@ -88,7 +112,7 @@ class AttackScreen(BaseScreen):
                 self._bail()
                 return
 
-            # --- step 3: OCR the loot numbers ---
+            # --- step 4: OCR the loot numbers ---
             loot = self._read_loot(screen, attack_cfg.get("loot_regions", {}))
             logger.info(
                 f"Enemy loot  gold={loot['gold']:,}  "
@@ -96,13 +120,9 @@ class AttackScreen(BaseScreen):
                 f"dark={loot['dark_elixir']:,}"
             )
 
-            # --- step 4: decide attack or skip ---
+            # --- step 5: decide hold attack or skip base ---
             if self._meets_threshold(loot, farm):
-                logger.info("Loot meets threshold - attacking!")
-                if not self._confirm_attack():
-                    logger.warning("Attack confirm button not found - bailing.")
-                    self._bail()
-                    return
+                logger.info("Loot meets threshold - keeping this base and attacking.")
                 break
 
             logger.info("Loot below threshold - skipping base.")
@@ -114,6 +134,18 @@ class AttackScreen(BaseScreen):
             )
             if not loc:
                 logger.warning("Next button not found - bailing.")
+                self._bail()
+                return
+            self.ui_manager.click(*loc)
+            logger.info("Tapped Next Enemy.")
+            ready = self._wait_until_any_appears(
+                SCOUT_READY_TEMPLATES,
+                timeout=20,
+                silent=True,
+                use_orb_fallback=False,
+            )
+            if not ready:
+                logger.warning("Scout screen not ready after Next Enemy - bailing.")
                 self._bail()
                 return
             skips += 1
@@ -128,7 +160,12 @@ class AttackScreen(BaseScreen):
 
         # --- step 6: wait for battle to end ---
         logger.info(f"Troops deployed. Waiting up to {BATTLE_TIMEOUT}s for battle end...")
-        loc = self._wait_until_any_appears(RETURN_HOME_TEMPLATES, timeout=BATTLE_TIMEOUT)
+        loc = self._wait_until_any_appears(
+            RETURN_HOME_TEMPLATES,
+            timeout=BATTLE_TIMEOUT,
+            use_orb_fallback=False,
+            validator=self._is_return_home_loc_valid,
+        )
         if not loc:
             logger.warning("Return Home button not found after battle timeout.")
             self._bail()
@@ -150,7 +187,8 @@ class AttackScreen(BaseScreen):
         for key in result:
             region = loot_regions.get(key)
             if region:
-                val = read_number(screen, tuple(region))
+                min_v, max_v = LOOT_BOUNDS.get(key, (0, None))
+                val = read_number(screen, tuple(region), min_value=min_v, max_value=max_v)
                 if val is not None:
                     result[key] = val
         return result
@@ -162,8 +200,12 @@ class AttackScreen(BaseScreen):
             and loot["dark_elixir"] >= farm.get("min_dark_elixir", 0)
         )
 
-    def _confirm_attack(self):
-        loc = self._wait_until_any_appears(ATTACK_CONFIRM_TEMPLATES, timeout=5, use_orb_fallback=False)
+    def _tap_start_match_attack(self):
+        loc = self._wait_until_any_appears(
+            START_MATCH_TEMPLATES,
+            timeout=5,
+            use_orb_fallback=False,
+        )
         if not loc:
             return False
         self.ui_manager.click(*loc)
@@ -224,5 +266,10 @@ class AttackScreen(BaseScreen):
 
     def _is_next_enemy_loc_valid(self, loc):
         x, y = loc
-        # Next Enemy should appear near lower-right during scout screen.
-        return 900 <= x <= 1595 and 500 <= y <= 890
+        # Next Enemy appears on the right side during scout screen.
+        return 900 <= x <= 1595 and 280 <= y <= 860
+
+    def _is_return_home_loc_valid(self, loc):
+        x, y = loc
+        # Return Home appears near the center-lower area on results screen.
+        return 350 <= x <= 1250 and 350 <= y <= 860
