@@ -1,18 +1,18 @@
-# Asset Layout
+# assets_v2
 
-Core runtime templates are organized by screen domain and should be referenced by relative key (path without `.png`) to avoid basename collisions.
+Naming convention:
+- lowercase snake_case
+- suffix with resolution if resolution-specific: `_1600x900`
+- button prefix: `btn_`
+- icon prefix: `icon_`
 
-- `ui/home/`: home-screen anchors
-- `ui/attack/`: attack flow buttons
-- `ui/battle/`: post-battle / return buttons
-- `buildings/`: building/resource icons
+Examples:
+- `buttons/home/btn_attack_1600x900.png`
+- `buttons/attack/btn_find_a_match_1600x900.png`
+- `buildings/resource_collectors/icon_gold_mine_full.png`
 
-Example template keys in code:
-- `ui/home/home_attack_button_1600x900`
-- `ui/attack/btn_find_a_match`
-- `buildings/icon_gold_mine_full`
-
-Rules:
-1. Use lowercase snake_case filenames.
-2. Prefer `ui/<screen>/<name>.png` for interactive buttons.
-3. Avoid duplicate basenames across folders unless code uses full relative keys.
+Collection rules:
+1. Crop tight around target UI element.
+2. Avoid large background area.
+3. Keep one canonical asset per meaning per resolution.
+4. Put raw screenshots in `debug/samples/` before cropping.

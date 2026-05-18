@@ -13,8 +13,8 @@ class HomeScreen(BaseScreen):
         emulator launcher or in-game store.
         """
         anchors = [
-            "ui/home/home_attack_button_1600x900",
-            "ui/home/home_shop_button_1600x900",
+            "buttons/home/btn_attack",
+            "buttons/home/btn_shop",
         ]
         found = self.ui_manager.scan_all(anchors, use_orb_fallback=False)
         detected = len(found) == len(anchors)
@@ -27,9 +27,9 @@ class HomeScreen(BaseScreen):
     def collect_resources(self):
         """Detect and collect all currently full resource collectors."""
         resources = [
-            "buildings/icon_gold_mine_full",
-            "buildings/icon_elixir_collector_full",
-            "buildings/icon_dark_elixir_drill_full",
+            "buildings/resource_collectors/icon_gold_mine_full",
+            "buildings/resource_collectors/icon_elixir_collector_full",
+            "buildings/resource_collectors/icon_dark_elixir_drill_full",
         ]
         # Try up to 3 frames 0.3 s apart: animated badges (sparkle, pulse) may
         # score below threshold mid-animation but pass on the next frame.

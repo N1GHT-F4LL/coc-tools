@@ -14,17 +14,16 @@ DEPLOY_TAP_INTERVAL = 0.15
 BATTLE_TIMEOUT = 180
 
 FIND_A_MATCH_TEMPLATES = (
-    "ui/attack/btn_find_a_match",
-    "ui/attack/start_button",
-    "ui/attack/start_button_2",
+    "buttons/attack/btn_find_a_match",
 )
-NEXT_ENEMY_TEMPLATES = ("btn_next_enemy", "ui/attack/next_button")
+NEXT_ENEMY_TEMPLATES = ("buttons/attack/btn_next_enemy",)
 ATTACK_CONFIRM_TEMPLATES = (
-    "btn_attack_confirm",
-    "ui/attack/start_button_2",
-    "ui/attack/start_button",
+    "buttons/attack/btn_attack",
 )
-RETURN_HOME_TEMPLATES = ("btn_return_home", "ui/battle/end_battle", "ui/battle/end")
+RETURN_HOME_TEMPLATES = (
+    "buttons/battle/btn_return_home",
+    "buttons/battle/btn_end_battle",
+)
 FIND_A_MATCH_THRESHOLD = 0.65
 
 
@@ -52,7 +51,7 @@ class AttackScreen(BaseScreen):
 
         # --- step 1: tap the Attack! button on the home screen ---
         loc = self.ui_manager.wait_until_appears(
-            "ui/home/home_attack_button_1600x900",
+            "buttons/home/btn_attack",
             timeout=5,
             silent=True,
         )
@@ -67,6 +66,8 @@ class AttackScreen(BaseScreen):
             FIND_A_MATCH_TEMPLATES,
             timeout=15,
             threshold=FIND_A_MATCH_THRESHOLD,
+            use_orb_fallback=False,
+            validator=self._is_find_match_loc_valid,
         )
         if not loc:
             logger.warning("Find a Match button not found - bailing out of attack cycle.")
@@ -105,7 +106,12 @@ class AttackScreen(BaseScreen):
                 break
 
             logger.info("Loot below threshold - skipping base.")
-            loc = self._wait_until_any_appears(NEXT_ENEMY_TEMPLATES, timeout=5)
+            loc = self._wait_until_any_appears(
+                NEXT_ENEMY_TEMPLATES,
+                timeout=5,
+                use_orb_fallback=False,
+                validator=self._is_next_enemy_loc_valid,
+            )
             if not loc:
                 logger.warning("Next button not found - bailing.")
                 self._bail()
@@ -157,7 +163,7 @@ class AttackScreen(BaseScreen):
         )
 
     def _confirm_attack(self):
-        loc = self._wait_until_any_appears(ATTACK_CONFIRM_TEMPLATES, timeout=5)
+        loc = self._wait_until_any_appears(ATTACK_CONFIRM_TEMPLATES, timeout=5, use_orb_fallback=False)
         if not loc:
             return False
         self.ui_manager.click(*loc)
@@ -179,7 +185,7 @@ class AttackScreen(BaseScreen):
 
     def _bail(self):
         """Best-effort recovery: tap Return Home if visible, then close popups."""
-        loc = self._wait_until_any_appears(RETURN_HOME_TEMPLATES, timeout=5, silent=True)
+        loc = self._wait_until_any_appears(RETURN_HOME_TEMPLATES, timeout=5, silent=True, use_orb_fallback=False)
         if loc:
             self.ui_manager.click(*loc)
             logger.info("Return Home tapped (bail recovery).")
@@ -190,14 +196,33 @@ class AttackScreen(BaseScreen):
         existing = [name for name in candidates if name in vision.cache]
         return existing or list(candidates)
 
-    def _wait_until_any_appears(self, candidates, timeout=5, silent=False, threshold=0.7):
+    def _wait_until_any_appears(
+        self,
+        candidates,
+        timeout=5,
+        silent=False,
+        threshold=0.7,
+        use_orb_fallback=True,
+        validator=None,
+    ):
         for template_name in self._existing_templates(candidates):
             loc = self.ui_manager.wait_until_appears(
                 template_name,
                 timeout=timeout,
                 silent=silent,
                 threshold=threshold,
+                use_orb_fallback=use_orb_fallback,
             )
-            if loc:
+            if loc and (validator is None or validator(loc)):
                 return loc
         return None
+
+    def _is_find_match_loc_valid(self, loc):
+        x, y = loc
+        # Find a Match is expected in the lower-left panel area.
+        return 100 <= x <= 700 and 520 <= y <= 860
+
+    def _is_next_enemy_loc_valid(self, loc):
+        x, y = loc
+        # Next Enemy should appear near lower-right during scout screen.
+        return 900 <= x <= 1595 and 500 <= y <= 890

@@ -15,7 +15,7 @@ class BaseScreen:
         closed_any = False
         
         # Try to close generic close/okay buttons with very short timeout (0.3s each)
-        for btn in ["ui/btn_close", "btn_okay", "btn_ok"]:
+        for btn in ["buttons/popup/btn_close", "btn_okay", "btn_ok"]:
             if self.ui_manager.click_if_exists_quick(btn, timeout=0.2):
                 closed_any = True
                 logger.info(f"Closed popup button: {btn}")
