@@ -216,10 +216,10 @@ class Device:
         for attempt in range(1, retries + 1):
             if self._check_connection():
                 if attempt > 1:
-                    logger.info(f"ADB device detected on attempt {attempt}/{retries}.")
+                    logger.debug(f"ADB device detected on attempt {attempt}/{retries}.")
                 return True
             if attempt < retries:
-                logger.info(f"Waiting for ADB device ({attempt}/{retries})...")
+                logger.debug(f"Waiting for ADB device ({attempt}/{retries})...")
                 time.sleep(retry_delay)
         return False
 
@@ -383,7 +383,7 @@ def launch_emulator_for_profile(profile, logger):
         if os.path.exists(exe):
             try:
                 subprocess.Popen([exe], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                logger.info(f"Launched emulator executable: {exe}")
+                logger.info(f"Starting emulator for profile '{profile}'...")
                 return True
             except Exception as e:
                 logger.warning(f"Failed to launch emulator at {exe}: {e}")
@@ -413,12 +413,12 @@ def ensure_emulator_running(profile, logger):
     if profile not in PROFILE_PROCESS_NAMES:
         return True
     if is_emulator_running(profile):
-        logger.info(f"Emulator process for profile '{profile}' is already running.")
+        logger.debug(f"Emulator process for profile '{profile}' is already running.")
         return True
-    logger.info(f"Emulator process for profile '{profile}' is not running. Launching...")
+    logger.info(f"Emulator for profile '{profile}' is not running.")
     launched = launch_emulator_for_profile(profile, logger)
     if launched:
-        logger.info(f"Waiting 12 seconds for {profile} startup...")
+        logger.debug(f"Waiting 12 seconds for {profile} startup...")
         time.sleep(12)
         return True
     logger.warning(f"Could not auto-launch emulator for profile '{profile}'.")
@@ -603,11 +603,11 @@ def bootstrap_device(settings, save_settings, logger):
         settings.setdefault("device", {})
         settings["device"]["serial"] = device.serial
         save_settings(settings)
-        logger.info(f"Saved selected device serial to settings: {device.serial}")
+        logger.debug(f"Saved selected device serial to settings: {device.serial}")
 
     if not device.ensure_connection(retries=3, retry_delay=1.5):
         logger.error("No usable ADB device found after retries.")
-        logger.info("Falling back to setup wizard...")
+        logger.debug("Falling back to setup wizard...")
         if not run_device_setup_wizard(device, settings, save_settings, logger):
             logger.error("Device setup wizard failed.")
             return None
