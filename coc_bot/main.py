@@ -13,12 +13,8 @@ from screens.home_screen import HomeScreen
 
 SETTINGS_PATH = "coc_bot/settings.json"
 COC_PACKAGE = "com.supercell.clashofclans"
-
-# Seconds to wait between full farm cycles when there is no attack phase yet.
-# Once the attack phase is implemented this delay will be replaced by the
-# natural duration of a battle + return trip.
+# Replaced by battle duration once the attack phase is implemented.
 IDLE_CYCLE_SLEEP = 30
-
 HOME_DETECT_MAX_MISSES = 2
 
 
@@ -62,23 +58,18 @@ def main():
 
     home_screen = HomeScreen(ui_manager)
 
-    # Wait up to 10 s for the village to fully load before the first action.
     logger.info("Waiting for home screen to load...")
-    home_ready = False
     deadline = time.time() + 10
     while time.time() < deadline:
         if home_screen.is_current_screen():
             logger.info("Home screen detected.")
-            home_ready = True
+            logger.info("Zooming out for full village view...")
+            device.pinch('out', span_pixels=600, repeats=1)
+            time.sleep(1.0)
             break
         time.sleep(1)
-    if not home_ready:
+    else:
         logger.warning("Home screen not detected after 10 s. Continuing anyway...")
-
-    if home_ready:
-        logger.info("Zooming out for full village view...")
-        device.pinch('out', span_pixels=600, repeats=1)
-        time.sleep(1.0)
 
     logger.info("Bot running. Press Ctrl+C to stop.")
 
@@ -90,7 +81,6 @@ def main():
             cycle += 1
             logger.info(f"--- Cycle {cycle} ---")
 
-            # ── 1. Ensure we are on the home screen ───────────────────────
             if home_screen.is_current_screen():
                 home_misses = 0
             else:
@@ -115,16 +105,11 @@ def main():
                         time.sleep(1.0)
                 continue
 
-            # ── 2. Collect available resources (one-shot per cycle) ────────
             home_screen.collect_resources()
 
-            # ── 3. Attack phase ────────────────────────────────────────────
             # TODO: implement attack cycle
             # attack_screen.run_attack_cycle()
 
-            # ── 4. Idle wait before next cycle ────────────────────────────
-            # This delay will be removed once the attack phase is implemented
-            # because the battle duration naturally paces the loop.
             logger.info(f"Cycle {cycle} complete. Next cycle in {IDLE_CYCLE_SLEEP}s...")
             time.sleep(IDLE_CYCLE_SLEEP)
 

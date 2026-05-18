@@ -6,60 +6,39 @@ logger = logging.getLogger(__name__)
 
 class HomeScreen(BaseScreen):
     def is_current_screen(self):
-        """
-        Detect if we're on the home screen by checking for characteristic UI elements.
-        Strict multi-anchor detection (§13.3): require all home-only anchors to
-        hit. Attack! and Shop are on opposite corners and both appear only on
-        the home/village screen, so a missing hit means we're on a different
-        screen or occluded by a popup (recovery handles popups).
-        Anchors are captured at 1600x900; the vision layer's multi-scale
-        matcher handles other emulator resolutions.
+        """Strict two-anchor detection (§13.3): both must hit in one frame.
+
+        Attack! and Shop are on opposite corners — both visible only on the
+        village screen. ORB fallback off to prevent false positives on the
+        emulator launcher or in-game store.
         """
         anchors = [
             "home_attack_button_1600x900",
             "home_shop_button_1600x900",
         ]
-        hits = 0
-        for anchor in anchors:
-            loc = self.ui_manager.wait_until_appears(
-                anchor,
-                timeout=0.6,
-                use_orb_fallback=False,
-                silent=True,
-            )
-            if loc:
-                hits += 1
-
-        if hits == len(anchors):
-            logger.debug(f"Home screen detected with {hits}/{len(anchors)} strict anchors")
-            return True
-
-        logger.debug(f"Home screen not detected ({hits}/{len(anchors)} anchors)")
-        return False
+        found = self.ui_manager.scan_all(anchors, use_orb_fallback=False)
+        detected = len(found) == len(anchors)
+        logger.debug(
+            f"Home screen {'detected' if detected else 'not detected'} "
+            f"({len(found)}/{len(anchors)} anchors)"
+        )
+        return detected
 
     def collect_resources(self):
-        """Collect available resources in one screen capture.
-
-        scan_all() takes a single screenshot and checks all three templates
-        against that same frame, so the result reflects what is actually
-        visible at one point in time rather than three separate captures that
-        may catch different animation frames.
-        """
+        """Detect and collect all currently full resource collectors."""
         resources = [
             "icon_gold_mine_full",
             "icon_elixir_collector_full",
             "icon_dark_elixir_drill_full",
         ]
-        # Scan up to 3 frames (0.3 s apart) so animated badges (gold mine
-        # sparkle, elixir pulse) are caught at a high-confidence frame.
-        # Each pass only re-scans resource types not yet detected.
+        # Try up to 3 frames 0.3 s apart: animated badges (sparkle, pulse) may
+        # score below threshold mid-animation but pass on the next frame.
         found = {}
         remaining = list(resources)
         for _ in range(3):
             if not remaining:
                 break
-            partial = self.ui_manager.scan_all(remaining)
-            found.update(partial)
+            found.update(self.ui_manager.scan_all(remaining))
             remaining = [r for r in remaining if r not in found]
             if remaining:
                 time.sleep(0.3)
@@ -72,10 +51,9 @@ class HomeScreen(BaseScreen):
             logger.info(f"Collecting '{name}' at {loc}")
             self.ui_manager.click(loc[0], loc[1])
 
-        # Wait for collection animations then re-scan what we clicked.
-        # Any badge still visible means the tap was dropped — click once more.
+        # Re-scan after animations clear; a badge still visible means the
+        # ADB tap was dropped — click it once more.
         time.sleep(0.6)
-        retry = self.ui_manager.scan_all(list(found.keys()))
-        for name, loc in retry.items():
+        for name, loc in self.ui_manager.scan_all(list(found.keys())).items():
             logger.info(f"Collecting '{name}' at {loc} (retry)")
             self.ui_manager.click(loc[0], loc[1])
