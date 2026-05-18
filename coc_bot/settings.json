@@ -26,11 +26,12 @@
     "radius": 5
   },
   "attack": {
-    "loot_regions": {
-      "_note": "Pixel regions [x1,y1,x2,y2] for loot OCR on enemy base preview at 1600x900. Calibrate with: python scripts/probe_and_crop.py crop x1 y1 x2 y2 <name>",
-      "gold":       [62, 88, 250, 126],
-      "elixir":     [62, 122, 250, 160],
-      "dark_elixir":[62, 156, 250, 194]
+    "loot_by_icon": {
+      "_note": "Auto-locate resource icons then OCR numbers by relative offsets.",
+      "threshold": 0.65,
+      "x_start_offset": 18,
+      "x_end_offset": 236,
+      "y_half_height": 19
     },
     "deploy": {
       "_note": "Deployment sweep along the bottom edge of the battlefield at 1600x900.",

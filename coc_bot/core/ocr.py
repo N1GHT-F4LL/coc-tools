@@ -24,11 +24,11 @@ def _prep_variants(crop):
     gray = cv2.GaussianBlur(gray, (3, 3), 0)
     gray = cv2.resize(gray, None, fx=2.5, fy=2.5, interpolation=cv2.INTER_CUBIC)
 
-    variants = [gray]
+    variants = [("gray", gray)]
 
     th_otsu = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
-    variants.append(th_otsu)
-    variants.append(cv2.bitwise_not(th_otsu))
+    variants.append(("otsu", th_otsu))
+    variants.append(("otsu_inv", cv2.bitwise_not(th_otsu)))
 
     th_adapt = cv2.adaptiveThreshold(
         gray,
@@ -38,11 +38,11 @@ def _prep_variants(crop):
         31,
         2,
     )
-    variants.append(th_adapt)
-    variants.append(cv2.bitwise_not(th_adapt))
+    variants.append(("adapt", th_adapt))
+    variants.append(("adapt_inv", cv2.bitwise_not(th_adapt)))
 
     kernel = np.ones((2, 2), np.uint8)
-    variants.append(cv2.morphologyEx(th_otsu, cv2.MORPH_CLOSE, kernel))
+    variants.append(("otsu_close", cv2.morphologyEx(th_otsu, cv2.MORPH_CLOSE, kernel)))
 
     return variants
 
@@ -61,7 +61,12 @@ def _extract_digit_candidates(ocr_items):
     return out
 
 
-def read_number(screen_bgr, region, min_value=0, max_value=None):
+def read_number(
+    screen_bgr,
+    region,
+    min_value=0,
+    max_value=None,
+):
     """Read a single integer from a BGR screen region (x1, y1, x2, y2)."""
     x1, y1, x2, y2 = region
     crop = screen_bgr[y1:y2, x1:x2]
@@ -69,8 +74,10 @@ def read_number(screen_bgr, region, min_value=0, max_value=None):
         return None
 
     reader = _get_reader()
+    prepared = _prep_variants(crop)
+
     candidates = []
-    for variant in _prep_variants(crop):
+    for _, variant in prepared:
         ocr_items = reader.readtext(
             variant,
             detail=1,

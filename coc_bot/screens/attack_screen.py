@@ -17,6 +17,11 @@ LOOT_BOUNDS = {
     "elixir": (0, 3000000),
     "dark_elixir": (0, 50000),
 }
+LOOT_ICON_TEMPLATES = {
+    "gold": "icons/resources/icon_gold",
+    "elixir": "icons/resources/icon_elixir",
+    "dark_elixir": "icons/resources/icon_dark_elixir",
+}
 
 FIND_A_MATCH_TEMPLATES = (
     "buttons/attack/btn_find_a_match",
@@ -113,7 +118,7 @@ class AttackScreen(BaseScreen):
                 return
 
             # --- step 4: OCR the loot numbers ---
-            loot = self._read_loot(screen, attack_cfg.get("loot_regions", {}))
+            loot = self._read_loot(screen)
             logger.info(
                 f"Enemy loot  gold={loot['gold']:,}  "
                 f"elixir={loot['elixir']:,}  "
@@ -182,16 +187,67 @@ class AttackScreen(BaseScreen):
     # Helpers
     # ------------------------------------------------------------------
 
-    def _read_loot(self, screen, loot_regions):
+    def _read_loot(self, screen):
         result = {"gold": 0, "elixir": 0, "dark_elixir": 0}
+        attack_cfg = self.settings.get("attack", {})
+        by_icon_cfg = attack_cfg.get("loot_by_icon", {})
+        icon_threshold = float(by_icon_cfg.get("threshold", 0.65))
+        x_start = int(by_icon_cfg.get("x_start_offset", 18))
+        x_end = int(by_icon_cfg.get("x_end_offset", 236))
+        y_half = int(by_icon_cfg.get("y_half_height", 19))
+
         for key in result:
-            region = loot_regions.get(key)
+            region = self._region_from_icon(
+                screen,
+                key,
+                threshold=icon_threshold,
+                x_start_offset=x_start,
+                x_end_offset=x_end,
+                y_half_height=y_half,
+            )
             if region:
                 min_v, max_v = LOOT_BOUNDS.get(key, (0, None))
-                val = read_number(screen, tuple(region), min_value=min_v, max_value=max_v)
+                val = read_number(
+                    screen,
+                    tuple(region),
+                    min_value=min_v,
+                    max_value=max_v,
+                )
                 if val is not None:
                     result[key] = val
         return result
+
+    def _region_from_icon(
+        self,
+        screen,
+        loot_key,
+        threshold=0.65,
+        x_start_offset=18,
+        x_end_offset=236,
+        y_half_height=19,
+    ):
+        template = LOOT_ICON_TEMPLATES.get(loot_key)
+        if not template:
+            return None
+        icon_loc = vision.find_template(
+            screen,
+            template,
+            threshold=threshold,
+            use_orb_fallback=False,
+        )
+        if not icon_loc:
+            return None
+
+        cx, cy = icon_loc
+        h, w = screen.shape[:2]
+        x1 = max(0, min(w - 1, cx + x_start_offset))
+        x2 = max(0, min(w, cx + x_end_offset))
+        y1 = max(0, min(h - 1, cy - y_half_height))
+        y2 = max(0, min(h, cy + y_half_height))
+        if x2 <= x1 or y2 <= y1:
+            return None
+
+        return [int(x1), int(y1), int(x2), int(y2)]
 
     def _meets_threshold(self, loot, farm):
         return (
