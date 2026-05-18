@@ -34,3 +34,6 @@ Thumbs.db
 coc_bot/logs/
 # Keep track file list but ignore runtime images
 coc_bot/logs/debug/
+
+# Claude specific files
+.claude/settings.local.json
