@@ -20,7 +20,12 @@
       "Bash(adb -s emulator-5554 shell cmd package resolve-activity --brief com.supercell.clashofclans)",
       "Bash(adb -s emulator-5554 shell am start -n com.supercell.clashofclans/com.supercell.titan.GameApp)",
       "Bash(python *)",
-      "Bash(.venv/Scripts/python.exe *)"
+      "Bash(.venv/Scripts/python.exe *)",
+      "Bash(adb -s emulator-5554 shell wm size)",
+      "Bash(adb -s emulator-5554 shell wm density)",
+      "Bash(adb -s emulator-5554 shell getevent -pl)",
+      "Bash(.venv/Scripts/python *)",
+      "Bash(adb -s 127.0.0.1:5555 exec-out screencap -p)"
     ]
   }
 }

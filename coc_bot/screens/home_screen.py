@@ -7,9 +7,17 @@ class HomeScreen(BaseScreen):
     def is_current_screen(self):
         """
         Detect if we're on the home screen by checking for characteristic UI elements.
-        Home screen typically has Attack button and resource displays.
+        Strict multi-anchor detection (§13.3): require all home-only anchors to
+        hit. Attack! and Shop are on opposite corners and both appear only on
+        the home/village screen, so a missing hit means we're on a different
+        screen or occluded by a popup (recovery handles popups).
+        Anchors are captured at 1600x900; the vision layer's multi-scale
+        matcher handles other emulator resolutions.
         """
-        anchors = ["icon_attack", "btn_attack", "attack"]
+        anchors = [
+            "home_attack_button_1600x900",
+            "home_shop_button_1600x900",
+        ]
         hits = 0
         for anchor in anchors:
             loc = self.ui_manager.wait_until_appears(
@@ -21,11 +29,11 @@ class HomeScreen(BaseScreen):
             if loc:
                 hits += 1
 
-        if hits >= 2:
-            logger.debug(f"Home screen detected with {hits} strict anchors")
+        if hits == len(anchors):
+            logger.debug(f"Home screen detected with {hits}/{len(anchors)} strict anchors")
             return True
 
-        logger.debug("Home screen not detected")
+        logger.debug(f"Home screen not detected ({hits}/{len(anchors)} anchors)")
         return False
 
     def collect_resources(self):

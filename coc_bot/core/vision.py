@@ -9,6 +9,12 @@ logger = logging.getLogger(__name__)
 # Initialize ORB detector once (reuse across calls for efficiency)
 ORB_DETECTOR = cv2.ORB_create(nfeatures=500, scaleFactor=1.2, nlevels=8)
 
+# Scale ladder for multi-resolution template matching. Native scale first so a
+# perfect-resolution match exits early; the spread covers typical emulator
+# resolution mismatches (720p/900p/1080p captures cross-matching).
+DEFAULT_MATCH_SCALES = (1.0, 0.75, 1.25, 0.5, 1.5, 0.6, 0.85)
+
+
 class Vision:
     def __init__(self):
         self.cache = {}
@@ -30,28 +36,63 @@ class Vision:
                 count += 1
         logger.info(f"Loaded {count} assets into RAM.")
 
-    def find_template(self, screen_color, template_name, threshold=0.7, use_orb_fallback=True):
+    def find_template(self, screen_color, template_name, threshold=0.7, use_orb_fallback=True, scales=None):
         if template_name not in self.cache or screen_color is None:
             return None
-            
+
         template = self.cache[template_name]
         screen_gray = cv2.cvtColor(screen_color, cv2.COLOR_BGR2GRAY)
-        
-        # Fast template matching (Assumes exact resolution match)
-        res = cv2.matchTemplate(screen_gray, template, cv2.TM_CCOEFF_NORMED)
-        _, max_val, _, max_loc = cv2.minMaxLoc(res)
-        
-        if max_val >= threshold:
-            h, w = template.shape[:2]
-            return (max_loc[0] + w // 2, max_loc[1] + h // 2)
-        
+        sh, sw = screen_gray.shape[:2]
+        th, tw = template.shape[:2]
+
+        # Multi-scale template matching. The asset library was captured at
+        # multiple resolutions, and the bot may run on any emulator preset, so
+        # try the native scale first then a spread that brackets common
+        # mismatches. Skip scales that would make the template larger than the
+        # screen or shrink it below an unusable size.
+        if scales is None:
+            scales = DEFAULT_MATCH_SCALES
+
+        best_val = -1.0
+        best_loc = None
+        best_size = None
+        for s in scales:
+            if s == 1.0:
+                scaled = template
+                nh, nw = th, tw
+            else:
+                nh, nw = int(th * s), int(tw * s)
+                if nh < 8 or nw < 8:
+                    continue
+                interp = cv2.INTER_AREA if s < 1.0 else cv2.INTER_CUBIC
+                scaled = cv2.resize(template, (nw, nh), interpolation=interp)
+
+            if nh > sh or nw > sw:
+                continue
+
+            res = cv2.matchTemplate(screen_gray, scaled, cv2.TM_CCOEFF_NORMED)
+            _, max_val, _, max_loc = cv2.minMaxLoc(res)
+
+            if max_val > best_val:
+                best_val = max_val
+                best_loc = max_loc
+                best_size = (nw, nh)
+
+            # Strong native-scale match: no need to scan further scales.
+            if s == 1.0 and max_val >= threshold:
+                break
+
+        if best_loc is not None and best_val >= threshold:
+            bw, bh = best_size
+            return (best_loc[0] + bw // 2, best_loc[1] + bh // 2)
+
         if use_orb_fallback:
             # Fallback: ORB feature matching for scale/rotation robustness
-            logger.debug(f"Template match confidence {max_val:.3f} < {threshold}; trying ORB fallback for '{template_name}'")
+            logger.debug(f"Template match best confidence {best_val:.3f} < {threshold}; trying ORB fallback for '{template_name}'")
             orb_match = self._find_by_orb_features(screen_gray, template, template_name)
             if orb_match:
                 return orb_match
-            
+
         return None
 
     def _find_by_orb_features(self, screen_gray, template, template_name, min_matches=4):

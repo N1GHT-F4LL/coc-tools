@@ -484,6 +484,105 @@ class Device:
         logger.warning("Could not bring app to foreground.")
         return False
 
+    def get_screen_size(self):
+        """Return (width, height) reported by `wm size`. Prefers override over physical."""
+        if not self.available or not self.connected:
+            return None
+        res = self._run_adb(['shell', 'wm', 'size'])
+        if res is None or res.returncode != 0:
+            return None
+        text = res.stdout or ""
+        # Override line takes precedence over Physical when both are present.
+        for prefix in ("Override size:", "Physical size:"):
+            for line in text.splitlines():
+                line = line.strip()
+                if line.startswith(prefix):
+                    try:
+                        wh = line.split(":", 1)[1].strip().lower()
+                        w, h = wh.split("x")
+                        return (int(w), int(h))
+                    except Exception:
+                        return None
+        return None
+
+    def get_screen_density(self):
+        """Return DPI reported by `wm density`. Prefers override over physical."""
+        if not self.available or not self.connected:
+            return None
+        res = self._run_adb(['shell', 'wm', 'density'])
+        if res is None or res.returncode != 0:
+            return None
+        text = res.stdout or ""
+        for prefix in ("Override density:", "Physical density:"):
+            for line in text.splitlines():
+                line = line.strip()
+                if line.startswith(prefix):
+                    try:
+                        return int(line.split(":", 1)[1].strip())
+                    except Exception:
+                        return None
+        return None
+
+    def enforce_resolution(self, target_resolution, target_density=None, package_name="com.supercell.clashofclans"):
+        """
+        Lock the device to a known display geometry via `wm size` / `wm density`.
+
+        If the target app is running and size needs to change, force-stop it
+        first so its relaunch picks up the new layout cleanly (CoC does not
+        re-layout robustly on live resolution change).
+
+        target_resolution: "WIDTHxHEIGHT" string, e.g. "1600x900".
+        target_density: integer DPI, or None to leave density untouched.
+        Returns True when the target size is in effect afterwards.
+        """
+        if not self.available or not self.connected:
+            return False
+        try:
+            tw_str, th_str = target_resolution.lower().split("x")
+            tw, th = int(tw_str), int(th_str)
+        except Exception:
+            logger.error(f"Invalid target_resolution '{target_resolution}'. Use WIDTHxHEIGHT (e.g. 1600x900).")
+            return False
+
+        current_size = self.get_screen_size()
+        current_density = self.get_screen_density()
+        size_needs_change = current_size != (tw, th)
+        density_needs_change = target_density is not None and current_density != target_density
+
+        if not (size_needs_change or density_needs_change):
+            logger.debug(f"Display already at {tw}x{th} @ density {current_density}.")
+            return True
+
+        logger.info(
+            f"Enforcing display: size {current_size} -> {tw}x{th}, density {current_density} -> {target_density}"
+        )
+
+        if size_needs_change and self.is_app_running(package_name):
+            logger.warning(f"{package_name} is running; force-stopping before resolution change.")
+            self._run_adb(['shell', 'am', 'force-stop', package_name])
+            time.sleep(1.0)
+
+        if size_needs_change:
+            res = self._run_adb(['shell', 'wm', 'size', f"{tw}x{th}"])
+            if res is None or res.returncode != 0:
+                logger.warning(f"Failed to set wm size to {tw}x{th}.")
+                return False
+
+        if density_needs_change:
+            res = self._run_adb(['shell', 'wm', 'density', str(target_density)])
+            if res is None or res.returncode != 0:
+                logger.warning(f"Failed to set wm density to {target_density}; continuing with size change only.")
+
+        time.sleep(0.5)
+        actual = self.get_screen_size()
+        if actual != (tw, th):
+            logger.warning(f"After wm size, screen is {actual} (expected {tw}x{th}).")
+            return False
+        logger.info(
+            f"Display locked to {tw}x{th}" + (f" @ density {target_density}" if target_density else "")
+        )
+        return True
+
     def is_package_installed(self, package_name):
         if not self.available or not self.connected:
             return None
@@ -553,6 +652,21 @@ class Device:
         logger.error("Launch attempts completed but app is still not running.")
         return False
 
+    def restart_game(self, package_name="com.supercell.clashofclans"):
+        """
+        Force-stop the app and relaunch it. Used as a recovery path when the
+        bot is stuck on a non-recognized state (e.g. inactivity disconnect
+        popup) and `close_popups` cannot escape it. Returns True when the app
+        is running afterwards.
+        """
+        if not self.available or not self.connected:
+            logger.warning("Cannot restart game: no active ADB device.")
+            return False
+        logger.info(f"Restarting {package_name} (force-stop + launch)...")
+        self._run_adb(['shell', 'am', 'force-stop', package_name])
+        time.sleep(1.5)
+        return self.launch_game(package_name)
+
     def ensure_coc_ready(self, package_name, settings, save_settings, logger):
         """
         Ensure CoC is installed, launched, and foregrounded.
@@ -619,6 +733,138 @@ class Device:
         except FileNotFoundError:
             logger.error("adb binary not found when attempting to capture screen.")
             return None
+
+    def _find_touch_input_device(self):
+        """
+        Find the multi-touch event device (e.g. /dev/input/event4 on BlueStacks).
+        Returns (path, max_x, max_y) or (None, None, None).
+        Looks for a device exposing ABS_MT_POSITION_X.
+        """
+        if not self.available or not self.connected:
+            return (None, None, None)
+        res = self._run_adb(['shell', 'getevent', '-pl'])
+        if res is None or res.returncode != 0:
+            return (None, None, None)
+        current_path = None
+        current_has_mt_x = False
+        current_max_x = None
+        current_max_y = None
+        for line in (res.stdout or "").splitlines():
+            stripped = line.strip()
+            if stripped.startswith("add device"):
+                # Flush previous if it was MT-capable
+                if current_path and current_has_mt_x:
+                    return (current_path, current_max_x, current_max_y)
+                # Start new device block
+                parts = stripped.split(":", 1)
+                current_path = parts[1].strip() if len(parts) > 1 else None
+                current_has_mt_x = False
+                current_max_x = None
+                current_max_y = None
+            elif "ABS_MT_POSITION_X" in stripped:
+                current_has_mt_x = True
+                # Parse max from "ABS_MT_POSITION_X     : value 0, min 0, max 32767, ..."
+                try:
+                    current_max_x = int(stripped.split("max")[1].split(",")[0].strip())
+                except Exception:
+                    current_max_x = None
+            elif "ABS_MT_POSITION_Y" in stripped:
+                try:
+                    current_max_y = int(stripped.split("max")[1].split(",")[0].strip())
+                except Exception:
+                    current_max_y = None
+        if current_path and current_has_mt_x:
+            return (current_path, current_max_x, current_max_y)
+        return (None, None, None)
+
+    def pinch(self, direction='out', center=None, span_pixels=400, steps=15, repeats=1):
+        """
+        Multi-touch pinch via sendevent (Protocol A: two fingers separated by
+        SYN_MT_REPORT, frames separated by SYN_REPORT). Used to zoom the CoC
+        village in/out so collectors at the edges become visible.
+
+        direction:    'out' fingers move toward center (zoom out),
+                      'in'  fingers move apart from center (zoom in)
+        center:       (x, y) pixel center; defaults to screen midpoint
+        span_pixels:  far-finger distance from center (closer end = 1/4 of this)
+        steps:        number of interpolated frames
+        repeats:      consecutive pinches (each lifts fingers between). Useful
+                      because CoC clamps zoom-out at a max level, so a few
+                      repeats reliably hits the floor regardless of starting zoom.
+        Returns True on success.
+        """
+        if not self.available or not self.connected:
+            return False
+
+        event_dev, max_x_evt, max_y_evt = self._find_touch_input_device()
+        if not event_dev:
+            logger.warning("No multi-touch input device found; cannot pinch.")
+            return False
+
+        size = self.get_screen_size()
+        if not size:
+            logger.warning("Cannot pinch: failed to read screen size.")
+            return False
+        sw, sh = size
+        cx, cy = center or (sw // 2, sh // 2)
+
+        # BlueStacks Virtual Touch and most MT devices use a normalized 0..max
+        # coordinate space rather than raw pixels. Map accordingly.
+        max_x_evt = max_x_evt or sw
+        max_y_evt = max_y_evt or sh
+
+        def to_evt(px, py):
+            ex = max(0, min(max_x_evt, int(px * max_x_evt / sw)))
+            ey = max(0, min(max_y_evt, int(py * max_y_evt / sh)))
+            return ex, ey
+
+        if direction == 'out':
+            start_d, end_d = span_pixels, max(20, span_pixels // 5)
+        else:
+            start_d, end_d = max(20, span_pixels // 5), span_pixels
+
+        EV_ABS = 3
+        EV_SYN = 0
+        ABS_MT_POSITION_X = 0x35
+        ABS_MT_POSITION_Y = 0x36
+        SYN_REPORT = 0
+        SYN_MT_REPORT = 2
+
+        def build_script():
+            cmds = []
+            def se(t, c, v):
+                cmds.append(f"sendevent {event_dev} {t} {c} {v}")
+            for i in range(steps + 1):
+                t = i / max(1, steps)
+                d = int(start_d + (end_d - start_d) * t)
+                x1, y1 = to_evt(cx - d, cy)
+                x2, y2 = to_evt(cx + d, cy)
+                se(EV_ABS, ABS_MT_POSITION_X, x1)
+                se(EV_ABS, ABS_MT_POSITION_Y, y1)
+                se(EV_SYN, SYN_MT_REPORT, 0)
+                se(EV_ABS, ABS_MT_POSITION_X, x2)
+                se(EV_ABS, ABS_MT_POSITION_Y, y2)
+                se(EV_SYN, SYN_MT_REPORT, 0)
+                se(EV_SYN, SYN_REPORT, 0)
+                cmds.append("sleep 0.04")
+            # Lift all fingers: empty frame (no MT reports before SYN).
+            se(EV_SYN, SYN_REPORT, 0)
+            return ";".join(cmds)
+
+        logger.info(
+            f"Pinch {direction} x{repeats}: device={event_dev} center=({cx},{cy}) "
+            f"span={start_d}->{end_d} steps={steps}"
+        )
+        script = build_script()
+        for r in range(repeats):
+            res = self._run_adb(['shell', script])
+            if res is None or res.returncode != 0:
+                logger.warning(f"Pinch sendevent script returned non-zero on repeat {r + 1}.")
+                return False
+            if r < repeats - 1:
+                # Let CoC settle so the next pinch starts from a stable camera.
+                time.sleep(0.3)
+        return True
 
     def tap(self, x, y):
         if not self.available or not self.connected:
@@ -921,5 +1167,15 @@ def bootstrap_device(settings, save_settings, logger):
         if not device.ensure_connection(retries=3, retry_delay=1.5):
             logger.error("Still no usable ADB device after wizard.")
             return None
+
+    # Lock the display geometry before any vision work so the asset cache (which
+    # is tied to a capture resolution) lines up with what we actually screenshot.
+    if device_cfg.get("enforce_resolution"):
+        target_res = device_cfg.get("target_resolution")
+        target_density = device_cfg.get("target_density")
+        if target_res:
+            device.enforce_resolution(target_res, target_density)
+        else:
+            logger.warning("enforce_resolution is true but device.target_resolution is unset; skipping.")
 
     return device

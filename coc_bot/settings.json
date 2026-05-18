@@ -6,7 +6,10 @@
     "serial": "127.0.0.1:5555",
     "strict_serial": true,
     "auto_select_single": true,
-    "auto_launch_profile": true
+    "auto_launch_profile": true,
+    "enforce_resolution": true,
+    "target_resolution": "1600x900",
+    "target_density": 240
   },
   "farm": {
     "min_gold": 500000,

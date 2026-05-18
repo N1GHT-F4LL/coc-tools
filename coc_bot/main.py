@@ -61,25 +61,44 @@ def main():
 
     max_wait = 10
     start_wait = time.time()
+    home_ready = False
     while time.time() - start_wait < max_wait:
         if home_screen.is_current_screen():
             logger.info("Home screen detected!")
+            home_ready = True
             break
         logger.info("Not on home screen yet, waiting...")
         time.sleep(1)
     else:
         logger.warning(f"Home screen not detected after {max_wait} seconds. Continuing anyway...")
 
+    # Default CoC zoom hides edge collectors. CoC clamps at a max zoom-out
+    # level which auto-centers on the Town Hall; a few repeats reliably hits
+    # that floor regardless of where the camera started.
+    if home_ready:
+        logger.info("Zooming out for overall village view...")
+        device.pinch('out', span_pixels=600, repeats=3)
+        time.sleep(1.0)
+
+    HOME_DETECT_MAX_MISSES = 2
     loop_count = 0
+    home_misses = 0
     while loop_count < 3:
         logger.info(f"--- Loop {loop_count} ---")
         if home_screen.is_current_screen():
+            home_misses = 0
             logger.info("On Home Screen. Collecting resources...")
             home_screen.collect_resources()
         else:
-            logger.warning("Not on home screen, attempting recovery...")
-            logger.debug("Closing any popups that may be blocking...")
+            home_misses += 1
+            logger.warning(f"Not on home screen ({home_misses}/{HOME_DETECT_MAX_MISSES} consecutive misses). Closing popups...")
             home_screen.close_popups()
+            if home_misses >= HOME_DETECT_MAX_MISSES:
+                logger.warning("close_popups did not recover home. Restarting game...")
+                if not device.restart_game(coc_package):
+                    logger.error("Game restart failed. Stopping bot.")
+                    return
+                home_misses = 0
 
         time.sleep(2)
         loop_count += 1
