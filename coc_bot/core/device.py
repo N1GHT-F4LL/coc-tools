@@ -232,17 +232,24 @@ class Device:
             time.sleep(1)
 
     def is_app_running(self, package_name="com.supercell.clashofclans"):
-        """Check if a given app (default: CoC) is currently running (any state)."""
+        """Check if app has an active process or is in foreground."""
         if not self.available or not self.connected:
             return False
         try:
-            res = self._run_adb(['shell', 'dumpsys', 'activity', 'activities'])
-            if res is None:
-                return False
-            if package_name in res.stdout:
-                logger.debug(f"App {package_name} is running")
+            # Fast path: app is foreground.
+            if self.is_app_foreground(package_name):
                 return True
-            logger.debug(f"App {package_name} is not running")
+
+            # Process check (more reliable than broad dumpsys activity parsing).
+            res_pid = self._run_adb(['shell', 'pidof', package_name])
+            if res_pid and (res_pid.stdout or "").strip():
+                return True
+
+            # Fallback for devices where pidof is unavailable.
+            res_ps = self._run_adb(['shell', 'ps'])
+            if res_ps and package_name in (res_ps.stdout or ""):
+                return True
+
             return False
         except Exception as e:
             logger.debug(f"Failed to check if app is running: {e}")
@@ -273,14 +280,24 @@ class Device:
         """Bring app to foreground if running but backgrounded."""
         if not self.available or not self.connected:
             logger.warning("Cannot bring app to foreground: no active ADB device.")
-            return
+            return False
+
         logger.info(f"Bringing {package_name} to foreground...")
+
+        # Strategy 1: monkey quick launch
         self._run_adb(['shell', 'monkey', '-p', package_name, '1'])
         time.sleep(2)
         if self.is_app_foreground(package_name):
-            logger.info("App brought to foreground.")
-        else:
-            logger.warning("App launch command sent, but app is still not foreground.")
+            return True
+
+        # Strategy 2: launcher intent
+        self._run_adb(['shell', 'am', 'start', '-a', 'android.intent.action.MAIN', '-c', 'android.intent.category.LAUNCHER', '-n', f'{package_name}/{package_name}.GameApp'])
+        time.sleep(2)
+        if self.is_app_foreground(package_name):
+            return True
+
+        logger.warning("Could not bring app to foreground.")
+        return False
 
     def is_package_installed(self, package_name):
         if not self.available or not self.connected:
