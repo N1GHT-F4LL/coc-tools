@@ -26,12 +26,26 @@
     "radius": 5
   },
   "attack": {
+    "debug_loot_regions": true,
     "loot_by_icon": {
       "_note": "Auto-locate resource icons then OCR numbers by relative offsets.",
-      "threshold": 0.65,
-      "x_start_offset": 18,
+      "threshold": 0.62,
+      "x_start_offset": -8,
       "x_end_offset": 236,
-      "y_half_height": 19
+      "y_half_height": 19,
+      "search_roi": [0, 70, 420, 360],
+      "per_resource": {
+        "dark_elixir": {
+          "threshold": 0.7,
+          "y_half_height": 16
+        }
+      }
+    },
+    "loot_regions": {
+      "_note": "Fallback OCR regions if icon detect misses.",
+      "gold": [20, 120, 250, 160],
+      "elixir": [20, 160, 250, 210],
+      "dark_elixir": [20, 220, 250, 260]
     },
     "deploy": {
       "_note": "Deployment sweep along the bottom edge of the battlefield at 1600x900.",

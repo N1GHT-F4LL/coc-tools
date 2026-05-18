@@ -2,6 +2,7 @@ import re
 import cv2
 import logging
 import numpy as np
+from collections import defaultdict
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +17,11 @@ def _get_reader():
         _reader = easyocr.Reader(["en"], gpu=False, verbose=False)
         logger.info("OCR reader ready.")
     return _reader
+
+
+def warmup_ocr():
+    """Preload OCR reader during startup to avoid first-use delay mid-cycle."""
+    _get_reader()
 
 
 def _prep_variants(crop):
@@ -67,11 +73,28 @@ def read_number(
     min_value=0,
     max_value=None,
 ):
+    val, _conf = read_number_with_confidence(
+        screen_bgr,
+        region,
+        min_value=min_value,
+        max_value=max_value,
+    )
+    return val
+
+
+def read_number_with_confidence(
+    screen_bgr,
+    region,
+    min_value=0,
+    max_value=None,
+    prefer_longest=True,
+    prefer_consensus=False,
+):
     """Read a single integer from a BGR screen region (x1, y1, x2, y2)."""
     x1, y1, x2, y2 = region
     crop = screen_bgr[y1:y2, x1:x2]
     if crop.size == 0:
-        return None
+        return None, 0.0
 
     reader = _get_reader()
     prepared = _prep_variants(crop)
@@ -90,7 +113,7 @@ def read_number(
 
     if not candidates:
         logger.debug(f"OCR: no text in region {region}")
-        return None
+        return None, 0.0
 
     bounded = []
     for val, conf, raw in candidates:
@@ -100,10 +123,34 @@ def read_number(
             continue
         bounded.append((val, conf, raw))
 
-    pool = bounded or candidates
-    # Prefer longer numbers first (avoid partial reads like "46"), then confidence.
-    val, conf, raw = max(pool, key=lambda x: (len(str(x[0])), x[1]))
+    if min_value is not None or max_value is not None:
+        # Respect numeric bounds strictly for targeted reads (e.g. dark elixir).
+        if not bounded:
+            logger.debug(
+                f"OCR: no bounded value in region {region} (min={min_value}, max={max_value}), raw_n={len(candidates)}"
+            )
+            return None, 0.0
+        pool = bounded
+    else:
+        pool = candidates
+    if prefer_consensus:
+        grouped = defaultdict(list)
+        for val_i, conf_i, raw_i in pool:
+            grouped[val_i].append((conf_i, raw_i))
+        # Prefer value seen multiple times across preprocessing variants.
+        best_val = max(
+            grouped.keys(),
+            key=lambda v: (len(grouped[v]), max(c for c, _ in grouped[v])),
+        )
+        conf, raw = max(grouped[best_val], key=lambda x: x[0])
+        val = best_val
+    elif prefer_longest:
+        # Prefer longer numbers first (avoid partial reads like "46"), then confidence.
+        val, conf, raw = max(pool, key=lambda x: (len(str(x[0])), x[1]))
+    else:
+        # For short values (e.g. dark elixir), prefer confidence first.
+        val, conf, raw = max(pool, key=lambda x: (x[1], len(str(x[0]))))
     logger.debug(
         f"OCR: region {region} -> {val} (conf={conf:.3f}, raw='{raw}', n={len(pool)}, bounded={bool(bounded)})"
     )
-    return val
+    return val, conf

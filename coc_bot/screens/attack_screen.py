@@ -1,8 +1,11 @@
 from .base_screen import BaseScreen
-from core.ocr import read_number
+from core.ocr import read_number_with_confidence
 from core.vision import vision
 import logging
 import time
+import os
+from datetime import datetime
+import cv2
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +24,23 @@ LOOT_ICON_TEMPLATES = {
     "gold": "icons/resources/icon_gold",
     "elixir": "icons/resources/icon_elixir",
     "dark_elixir": "icons/resources/icon_dark_elixir",
+}
+LOOT_ICON_CANDIDATE_TEMPLATES = {
+    "gold": (
+        "icons/resources/icon_gold",
+        "buildings/resource_collectors/icon_gold_mine_full",
+        "buildings/storages/icon_gold",
+    ),
+    "elixir": (
+        "icons/resources/icon_elixir",
+        "buildings/resource_collectors/icon_elixir_collector_full",
+        "buildings/storages/icon_elixir",
+    ),
+    "dark_elixir": (
+        "icons/resources/icon_dark_elixir",
+        "buildings/resource_collectors/icon_dark_elixir_drill_full",
+        "buildings/storages/icon_de",
+    ),
 }
 
 FIND_A_MATCH_TEMPLATES = (
@@ -118,11 +138,11 @@ class AttackScreen(BaseScreen):
                 return
 
             # --- step 4: OCR the loot numbers ---
-            loot = self._read_loot(screen)
+            loot, conf = self._read_loot(screen)
             logger.info(
-                f"Enemy loot  gold={loot['gold']:,}  "
-                f"elixir={loot['elixir']:,}  "
-                f"dark={loot['dark_elixir']:,}"
+                f"Enemy loot  gold={loot['gold']:,} (c={conf['gold']:.2f})  "
+                f"elixir={loot['elixir']:,} (c={conf['elixir']:.2f})  "
+                f"dark={loot['dark_elixir']:,} (c={conf['dark_elixir']:.2f})"
             )
 
             # --- step 5: decide hold attack or skip base ---
@@ -189,48 +209,308 @@ class AttackScreen(BaseScreen):
 
     def _read_loot(self, screen):
         result = {"gold": 0, "elixir": 0, "dark_elixir": 0}
+        conf = {"gold": 0.0, "elixir": 0.0, "dark_elixir": 0.0}
+        debug_regions = {}
         attack_cfg = self.settings.get("attack", {})
         by_icon_cfg = attack_cfg.get("loot_by_icon", {})
-        icon_threshold = float(by_icon_cfg.get("threshold", 0.65))
+        icon_threshold = float(by_icon_cfg.get("threshold", 0.62))
         x_start = int(by_icon_cfg.get("x_start_offset", 18))
         x_end = int(by_icon_cfg.get("x_end_offset", 236))
         y_half = int(by_icon_cfg.get("y_half_height", 19))
+        min_icon_conf = float(by_icon_cfg.get("min_icon_confidence", 0.55))
+        per_resource = by_icon_cfg.get("per_resource", {})
+        search_roi = by_icon_cfg.get("search_roi", [0, 70, 420, 360])
+        loot_regions = attack_cfg.get("loot_regions", {})
+        detected_icon_regions = self._regions_from_resource_icons(
+            screen,
+            search_roi=search_roi,
+            loot_regions=loot_regions,
+            x_start_offset=x_start,
+            x_end_offset=x_end,
+            y_half_height=y_half,
+            per_resource_cfg=per_resource,
+        )
 
         for key in result:
-            region = self._region_from_icon(
-                screen,
-                key,
-                threshold=icon_threshold,
-                x_start_offset=x_start,
-                x_end_offset=x_end,
-                y_half_height=y_half,
-            )
-            if region:
-                min_v, max_v = LOOT_BOUNDS.get(key, (0, None))
-                val = read_number(
+            key_cfg = per_resource.get(key, {}) if isinstance(per_resource, dict) else {}
+            key_threshold = float(key_cfg.get("threshold", icon_threshold))
+            key_x_start = int(key_cfg.get("x_start_offset", x_start))
+            key_x_end = int(key_cfg.get("x_end_offset", x_end))
+            key_y_half = int(key_cfg.get("y_half_height", y_half))
+            icon_region = detected_icon_regions.get(key)
+            if icon_region is None:
+                icon_region = self._region_from_icon(
+                    screen,
+                    key,
+                    threshold=key_threshold,
+                    x_start_offset=key_x_start,
+                    x_end_offset=key_x_end,
+                    y_half_height=key_y_half,
+                    search_roi=search_roi,
+                )
+            fallback_region = loot_regions.get(key)
+            if icon_region and fallback_region and len(fallback_region) == 4:
+                # Keep icon-anchored y band, but widen x using fallback to avoid
+                # clipping leading digits when icon center jitters to the right.
+                ix1, iy1, ix2, iy2 = [int(v) for v in icon_region]
+                fx1, _fy1, fx2, _fy2 = [int(v) for v in fallback_region]
+                icon_region = [min(ix1, fx1), iy1, max(ix2, fx2), iy2]
+
+            candidate_regions = []
+            if icon_region:
+                candidate_regions.append(icon_region)
+            if fallback_region and (
+                not icon_region or tuple(icon_region) != tuple(fallback_region)
+            ):
+                candidate_regions.append(fallback_region)
+
+            min_v, max_v = LOOT_BOUNDS.get(key, (0, None))
+            best_val = None
+            best_conf = 0.0
+            best_region = None
+            for idx, region in enumerate(candidate_regions):
+                val, c = read_number_with_confidence(
                     screen,
                     tuple(region),
                     min_value=min_v,
                     max_value=max_v,
+                    prefer_longest=(key != "dark_elixir"),
+                    prefer_consensus=(key == "dark_elixir"),
                 )
-                if val is not None:
-                    result[key] = val
-        return result
+                if val is None:
+                    continue
+                # Prefer icon-anchored region once it produces a plausible read.
+                # Fallback region is only allowed to replace it when icon confidence is weak.
+                is_icon_region = bool(icon_region) and idx == 0 and tuple(region) == tuple(icon_region)
+                if is_icon_region:
+                    best_val = val
+                    best_conf = c
+                    best_region = list(region)
+                    continue
+                if best_region is not None and icon_region and tuple(best_region) == tuple(icon_region) and best_conf >= min_icon_conf:
+                    continue
+                # Dark elixir is short and easy to misread; prefer stronger confidence.
+                if (
+                    best_val is None
+                    or c > best_conf
+                    or (abs(c - best_conf) < 1e-6 and val > best_val)
+                ):
+                    best_val = val
+                    best_conf = c
+                    best_region = list(region)
+
+            if best_val is not None:
+                result[key] = best_val
+                conf[key] = best_conf
+            if candidate_regions:
+                debug_regions[key] = {
+                    "icon_region": icon_region,
+                    "fallback_region": fallback_region,
+                    "used_candidates": candidate_regions,
+                    "selected_region": best_region,
+                    "value": result[key],
+                    "conf": conf[key],
+                }
+        self._dump_loot_debug(screen, debug_regions, attack_cfg)
+        return result, conf
+
+    def _regions_from_resource_icons(
+        self,
+        screen,
+        search_roi,
+        loot_regions=None,
+        x_start_offset=18,
+        x_end_offset=236,
+        y_half_height=19,
+        per_resource_cfg=None,
+    ):
+        h, w = screen.shape[:2]
+        out = {}
+        keys = ("gold", "elixir", "dark_elixir")
+        # Prefer icon matches close to expected row centers from fallback regions.
+        expected_y = {}
+        for key in keys:
+            reg = (loot_regions or {}).get(key)
+            if reg and len(reg) == 4:
+                expected_y[key] = int((int(reg[1]) + int(reg[3])) / 2)
+
+        for key in keys:
+            target_y = expected_y.get(key)
+            key_cfg = (per_resource_cfg or {}).get(key, {}) if isinstance(per_resource_cfg, dict) else {}
+            key_threshold = float(key_cfg.get("threshold", 0.56))
+            logger.debug(
+                f"[ICON_REGION] {key}: search_roi={search_roi}, target_y={target_y}, threshold={key_threshold:.3f}, "
+                f"offsets=({key_cfg.get('x_start_offset', x_start_offset)}, {key_cfg.get('x_end_offset', x_end_offset)}), "
+                f"y_half={key_cfg.get('y_half_height', y_half_height)}"
+            )
+            icon = self._find_best_resource_icon_match(
+                screen,
+                key,
+                search_roi=search_roi,
+                target_y=target_y,
+                threshold=key_threshold,
+            )
+            if not icon:
+                logger.debug(f"[ICON_REGION] {key}: NO ICON FOUND")
+                continue
+            cx, cy, _score = icon
+            logger.debug(f"[ICON_REGION] {key}: ICON CENTER cx={cx}, cy={cy}")
+
+            key_x_start = int(key_cfg.get("x_start_offset", x_start_offset))
+            key_x_end = int(key_cfg.get("x_end_offset", x_end_offset))
+            key_y_half = int(key_cfg.get("y_half_height", y_half_height))
+
+            x1 = max(0, min(w - 1, cx + key_x_start))
+            x2 = max(0, min(w, cx + key_x_end))
+            y1 = max(0, min(h - 1, cy - key_y_half))
+            y2 = max(0, min(h, cy + key_y_half))
+            logger.debug(f"[ICON_REGION] {key}: REGION [{x1}, {y1}, {x2}, {y2}] (offsets: x_start={key_x_start}, x_end={key_x_end})")
+            if x2 > x1 and y2 > y1:
+                out[key] = [int(x1), int(y1), int(x2), int(y2)]
+        return out
+
+    def _find_best_resource_icon_match(self, screen, loot_key, search_roi=None, target_y=None, threshold=0.56):
+        templates = LOOT_ICON_CANDIDATE_TEMPLATES.get(loot_key, ())
+        if not templates:
+            logger.debug(f"[ICON_DEBUG] {loot_key}: no candidate templates configured")
+            return None
+
+        crop = screen
+        roi_x1 = roi_y1 = 0
+        if search_roi and len(search_roi) == 4:
+            sx1, sy1, sx2, sy2 = [int(v) for v in search_roi]
+            h, w = screen.shape[:2]
+            sx1 = max(0, min(w - 1, sx1))
+            sx2 = max(1, min(w, sx2))
+            sy1 = max(0, min(h - 1, sy1))
+            sy2 = max(1, min(h, sy2))
+            if sx2 > sx1 and sy2 > sy1:
+                crop = screen[sy1:sy2, sx1:sx2]
+                roi_x1, roi_y1 = sx1, sy1
+
+        gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
+        best = None
+        for tpl_name in templates:
+            template = vision.cache.get(tpl_name)
+            if template is None:
+                logger.debug(f"[ICON_DEBUG] {loot_key}: template={tpl_name} missing from cache")
+                continue
+            score, scaled, result_map = vision._find_best_scale(gray, template, threshold=0.56)
+            if result_map is None or scaled is None:
+                logger.debug(f"[ICON_DEBUG] {loot_key}: template={tpl_name} produced no usable match map")
+                continue
+            _, _, _, max_loc = cv2.minMaxLoc(result_map)
+            th, tw = scaled.shape[:2]
+            cx = int(max_loc[0] + tw // 2 + roi_x1)
+            cy = int(max_loc[1] + th // 2 + roi_y1)
+            logger.debug(
+                f"[ICON_DEBUG] {loot_key}: template={tpl_name}, score={score:.3f}, "
+                f"match_center=({cx},{cy}), scaled_size=({tw}x{th}), roi_origin=({roi_x1},{roi_y1})"
+            )
+            if score < threshold:
+                logger.debug(
+                    f"[ICON_DEBUG] {loot_key}: template={tpl_name} rejected by score {score:.3f} < {threshold:.3f}"
+                )
+                continue
+            if cx > 130 or cx < 8:
+                logger.debug(f"[ICON_DEBUG] {loot_key}: REJECTED (cx out of bounds: {cx})")
+                continue
+
+            # Prefer correct row; small penalty if y differs from expected.
+            rank = score
+            if target_y is not None:
+                rank -= min(abs(cy - int(target_y)), 60) * 0.01
+
+            if best is None or rank > best[0]:
+                best = (rank, cx, cy, float(score))
+        if not best:
+            logger.debug(f"[ICON_DEBUG] {loot_key}: no template survived threshold/bounds checks")
+            return None
+        logger.debug(f"[ICON_DEBUG] {loot_key}: SELECTED cx={best[1]}, cy={best[2]}, score={best[3]}")
+        return (best[1], best[2], best[3])
+
+    def _dump_loot_debug(self, screen, debug_regions, attack_cfg):
+        if not attack_cfg.get("debug_loot_regions", False):
+            return
+        if not debug_regions:
+            return
+
+        out_dir = os.path.join("coc_bot", "logs", "debug", "loot_regions")
+        os.makedirs(out_dir, exist_ok=True)
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+
+        canvas = screen.copy()
+        colors = {
+            "gold": (0, 255, 255),         # cyan (bright)
+            "elixir": (0, 255, 0),         # green (bright)
+            "dark_elixir": (0, 0, 255)     # red (bright)
+        }
+        for key, meta in debug_regions.items():
+            color = colors.get(key, (0, 255, 0))
+            selected_region = meta.get("selected_region")
+            icon_region = meta.get("icon_region")
+            fallback_region = meta.get("fallback_region")
+            for region in meta.get("used_candidates", []):
+                x1, y1, x2, y2 = [int(v) for v in region]
+                thickness = 3 if selected_region and tuple(region) == tuple(selected_region) else 1
+                cv2.rectangle(canvas, (x1, y1), (x2, y2), color, thickness)
+                
+                # Determine region type (ICON or FALLBACK)
+                region_type = "?"
+                if icon_region and tuple(region) == tuple(icon_region):
+                    region_type = "ICON"
+                elif fallback_region and tuple(region) == tuple(fallback_region):
+                    region_type = "FALLBACK"
+                
+                label = f"{key} {region_type}: {meta['value']} c={meta['conf']:.2f}"
+                cv2.putText(
+                    canvas,
+                    label,
+                    (x1, max(18, y1 - 6)),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.5,
+                    color,
+                    1,
+                    cv2.LINE_AA,
+                )
+                crop = screen[y1:y2, x1:x2]
+                if crop.size > 0:
+                    crop_path = os.path.join(out_dir, f"{ts}_{key}_{x1}_{y1}_{x2}_{y2}.png")
+                    cv2.imwrite(crop_path, crop)
+
+        full_path = os.path.join(out_dir, f"{ts}_full.png")
+        cv2.imwrite(full_path, canvas)
+        logger.info(f"Loot debug images saved: {out_dir}")
 
     def _region_from_icon(
         self,
         screen,
         loot_key,
-        threshold=0.65,
+        threshold=0.62,
         x_start_offset=18,
         x_end_offset=236,
         y_half_height=19,
+        search_roi=None,
     ):
         template = LOOT_ICON_TEMPLATES.get(loot_key)
         if not template:
             return None
+
+        crop = screen
+        roi_x1 = roi_y1 = 0
+        if search_roi and len(search_roi) == 4:
+            sx1, sy1, sx2, sy2 = [int(v) for v in search_roi]
+            h, w = screen.shape[:2]
+            sx1 = max(0, min(w - 1, sx1))
+            sx2 = max(1, min(w, sx2))
+            sy1 = max(0, min(h - 1, sy1))
+            sy2 = max(1, min(h, sy2))
+            if sx2 > sx1 and sy2 > sy1:
+                crop = screen[sy1:sy2, sx1:sx2]
+                roi_x1, roi_y1 = sx1, sy1
+
         icon_loc = vision.find_template(
-            screen,
+            crop,
             template,
             threshold=threshold,
             use_orb_fallback=False,
@@ -238,7 +518,8 @@ class AttackScreen(BaseScreen):
         if not icon_loc:
             return None
 
-        cx, cy = icon_loc
+        cx = icon_loc[0] + roi_x1
+        cy = icon_loc[1] + roi_y1
         h, w = screen.shape[:2]
         x1 = max(0, min(w - 1, cx + x_start_offset))
         x2 = max(0, min(w, cx + x_end_offset))
@@ -246,7 +527,6 @@ class AttackScreen(BaseScreen):
         y2 = max(0, min(h, cy + y_half_height))
         if x2 <= x1 or y2 <= y1:
             return None
-
         return [int(x1), int(y1), int(x2), int(y2)]
 
     def _meets_threshold(self, loot, farm):

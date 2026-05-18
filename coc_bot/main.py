@@ -3,12 +3,14 @@ import time
 import cv2
 import os
 import logging
+import argparse
 from datetime import datetime
 from core.humanize import Humanize
 from core.ui_manager import UIManager
 from core.vision import vision
 from core.device import bootstrap_device
 from core.logging_utils import setup_logging
+from core.ocr import warmup_ocr
 from screens.home_screen import HomeScreen
 from screens.attack_screen import AttackScreen
 
@@ -27,10 +29,24 @@ def save_settings(settings):
         json.dump(settings, f, indent=2)
 
 
+def parse_args():
+    parser = argparse.ArgumentParser(add_help=True)
+    parser.add_argument("--debug", action="store_true", help="Enable debug logging")
+    parser.add_argument(
+        "--log-level",
+        default="INFO",
+        help="Logging level name (e.g. DEBUG, INFO, WARNING)",
+    )
+    return parser.parse_args()
+
+
 def main():
+    args = parse_args()
     settings = load_settings()
     humanize = Humanize(settings)
-    setup_logging(level=logging.INFO)
+    log_level_name = "DEBUG" if args.debug else args.log_level.upper()
+    log_level = getattr(logging, log_level_name, logging.INFO)
+    setup_logging(level=log_level)
     logger = logging.getLogger(__name__)
 
     device = bootstrap_device(settings, save_settings, logger)
@@ -43,6 +59,7 @@ def main():
 
     ui_manager = UIManager(humanize, device)
     vision.load_assets("coc_bot/assets")
+    warmup_ocr()
 
     logger.info("Capturing initial screen for debugging...")
     initial_screen = device.get_screen()
