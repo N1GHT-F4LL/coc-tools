@@ -9,15 +9,22 @@ class HomeScreen(BaseScreen):
         Detect if we're on the home screen by checking for characteristic UI elements.
         Home screen typically has Attack button and resource displays.
         """
-        # Try multiple anchor images to detect home screen
         anchors = ["icon_attack", "btn_attack", "attack"]
-        
+        hits = 0
         for anchor in anchors:
-            loc = self.ui_manager.wait_until_appears(anchor, timeout=1)
+            loc = self.ui_manager.wait_until_appears(
+                anchor,
+                timeout=0.6,
+                use_orb_fallback=False,
+                silent=True,
+            )
             if loc:
-                logger.debug(f"Home screen detected via {anchor} at {loc}")
-                return True
-        
+                hits += 1
+
+        if hits >= 2:
+            logger.debug(f"Home screen detected with {hits} strict anchors")
+            return True
+
         logger.debug("Home screen not detected")
         return False
 

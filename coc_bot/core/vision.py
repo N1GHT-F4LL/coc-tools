@@ -30,7 +30,7 @@ class Vision:
                 count += 1
         logger.info(f"Loaded {count} assets into RAM.")
 
-    def find_template(self, screen_color, template_name, threshold=0.7):
+    def find_template(self, screen_color, template_name, threshold=0.7, use_orb_fallback=True):
         if template_name not in self.cache or screen_color is None:
             return None
             
@@ -45,11 +45,12 @@ class Vision:
             h, w = template.shape[:2]
             return (max_loc[0] + w // 2, max_loc[1] + h // 2)
         
-        # Fallback: ORB feature matching for scale/rotation robustness
-        logger.debug(f"Template match confidence {max_val:.3f} < {threshold}; trying ORB fallback for '{template_name}'")
-        orb_match = self._find_by_orb_features(screen_gray, template, template_name)
-        if orb_match:
-            return orb_match
+        if use_orb_fallback:
+            # Fallback: ORB feature matching for scale/rotation robustness
+            logger.debug(f"Template match confidence {max_val:.3f} < {threshold}; trying ORB fallback for '{template_name}'")
+            orb_match = self._find_by_orb_features(screen_gray, template, template_name)
+            if orb_match:
+                return orb_match
             
         return None
 

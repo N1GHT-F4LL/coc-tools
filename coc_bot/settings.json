@@ -1,4 +1,11 @@
 {
+  "device": {
+    "profile": "bluestacks",
+    "endpoint": "",
+    "serial": "127.0.0.1:5555",
+    "auto_select_single": true,
+    "auto_launch_profile": true
+  },
   "farm": {
     "min_gold": 500000,
     "min_elixir": 500000,
