@@ -80,3 +80,20 @@ class UIManager:
             self.click(loc[0], loc[1])
             return True
         return False
+
+    def scan_all(self, template_names):
+        """Capture the screen once and find one instance of each template.
+
+        Returns {name: (x, y)} for every template that matched. All templates
+        are checked against the same single screenshot so the result reflects
+        one consistent point in time.
+        """
+        screen = self.device.get_screen()
+        if screen is None:
+            return {}
+        found = {}
+        for name in template_names:
+            loc = vision.find_template(screen, name)
+            if loc:
+                found[name] = loc
+        return found

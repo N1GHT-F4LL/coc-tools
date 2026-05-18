@@ -1,5 +1,6 @@
 from .base_screen import BaseScreen
 import logging
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -37,9 +38,44 @@ class HomeScreen(BaseScreen):
         return False
 
     def collect_resources(self):
-        """Collect resources from gold mine, elixir collector, dark elixir drill."""
-        logger.info("Collecting resources...")
-        # Tìm và click mỏ vàng/elixir
-        self.ui_manager.click_if_exists("icon_gold_mine_full")
-        self.ui_manager.click_if_exists("icon_elixir_collector_full")
-        self.ui_manager.click_if_exists("icon_dark_elixir_drill_full")
+        """Collect available resources in one screen capture.
+
+        scan_all() takes a single screenshot and checks all three templates
+        against that same frame, so the result reflects what is actually
+        visible at one point in time rather than three separate captures that
+        may catch different animation frames.
+        """
+        resources = [
+            "icon_gold_mine_full",
+            "icon_elixir_collector_full",
+            "icon_dark_elixir_drill_full",
+        ]
+        # Scan up to 3 frames (0.3 s apart) so animated badges (gold mine
+        # sparkle, elixir pulse) are caught at a high-confidence frame.
+        # Each pass only re-scans resource types not yet detected.
+        found = {}
+        remaining = list(resources)
+        for _ in range(3):
+            if not remaining:
+                break
+            partial = self.ui_manager.scan_all(remaining)
+            found.update(partial)
+            remaining = [r for r in remaining if r not in found]
+            if remaining:
+                time.sleep(0.3)
+
+        if not found:
+            logger.debug("No resource badges visible.")
+            return
+
+        for name, loc in found.items():
+            logger.info(f"Collecting '{name}' at {loc}")
+            self.ui_manager.click(loc[0], loc[1])
+
+        # Wait for collection animations then re-scan what we clicked.
+        # Any badge still visible means the tap was dropped — click once more.
+        time.sleep(0.6)
+        retry = self.ui_manager.scan_all(list(found.keys()))
+        for name, loc in retry.items():
+            logger.info(f"Collecting '{name}' at {loc} (retry)")
+            self.ui_manager.click(loc[0], loc[1])

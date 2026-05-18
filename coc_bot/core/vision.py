@@ -95,6 +95,67 @@ class Vision:
 
         return None
 
+    def find_all_matches(self, screen_color, template_name, threshold=0.7, min_distance=40):
+        """Find all non-overlapping instances of template_name on screen.
+
+        Uses the same multi-scale logic as find_template to pick the best
+        scale, then suppresses each found region and repeats until no more
+        matches exceed the threshold.  Returns a list of (cx, cy) centers.
+        """
+        if template_name not in self.cache or screen_color is None:
+            return []
+
+        template = self.cache[template_name]
+        screen_gray = cv2.cvtColor(screen_color, cv2.COLOR_BGR2GRAY)
+        sh, sw = screen_gray.shape[:2]
+        th, tw = template.shape[:2]
+
+        # Phase 1: find the best matching scale.
+        best_val = -1.0
+        best_scale = 1.0
+        for s in DEFAULT_MATCH_SCALES:
+            nh, nw = int(th * s), int(tw * s)
+            if nh < 8 or nw < 8 or nh > sh or nw > sw:
+                continue
+            scaled = template if s == 1.0 else cv2.resize(
+                template, (nw, nh),
+                interpolation=cv2.INTER_AREA if s < 1.0 else cv2.INTER_CUBIC,
+            )
+            _, mv, _, _ = cv2.minMaxLoc(cv2.matchTemplate(screen_gray, scaled, cv2.TM_CCOEFF_NORMED))
+            if mv > best_val:
+                best_val = mv
+                best_scale = s
+            if s == 1.0 and mv >= threshold:
+                break
+
+        if best_val < threshold:
+            return []
+
+        # Phase 2: collect all peaks at the best scale via non-maximum suppression.
+        bh, bw = int(th * best_scale), int(tw * best_scale)
+        scaled = template if best_scale == 1.0 else cv2.resize(
+            template, (bw, bh),
+            interpolation=cv2.INTER_AREA if best_scale < 1.0 else cv2.INTER_CUBIC,
+        )
+        result_map = cv2.matchTemplate(screen_gray, scaled, cv2.TM_CCOEFF_NORMED).copy()
+
+        locations = []
+        while True:
+            _, max_val, _, max_loc = cv2.minMaxLoc(result_map)
+            if max_val < threshold:
+                break
+            x, y = max_loc
+            locations.append((x + bw // 2, y + bh // 2))
+            # Zero out the region around this peak so the next call finds
+            # the next distinct instance rather than the same blob.
+            x1 = max(0, x - min_distance)
+            y1 = max(0, y - min_distance)
+            x2 = min(result_map.shape[1], x + bw + min_distance)
+            y2 = min(result_map.shape[0], y + bh + min_distance)
+            result_map[y1:y2, x1:x2] = 0.0
+
+        return locations
+
     def _find_by_orb_features(self, screen_gray, template, template_name, min_matches=4):
         """
         Fallback feature matching using ORB and FLANN.
