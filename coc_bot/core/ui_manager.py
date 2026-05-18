@@ -12,7 +12,7 @@ class UIManager:
         self.humanize = humanize
         self.device = device
 
-    def wait_until_appears(self, template_name, timeout=5, silent=False, use_orb_fallback=True): 
+    def wait_until_appears(self, template_name, timeout=5, silent=False, use_orb_fallback=True, threshold=0.7): 
         """
         Wait for template to appear on screen.
         
@@ -33,7 +33,12 @@ class UIManager:
                 # Could not obtain a screen capture; wait briefly and retry.
                 time.sleep(0.5)
                 continue
-            loc = vision.find_template(screen, template_name, use_orb_fallback=use_orb_fallback)
+            loc = vision.find_template(
+                screen,
+                template_name,
+                threshold=threshold,
+                use_orb_fallback=use_orb_fallback,
+            )
             if loc:
                 logger.info(f"Found '{template_name}' at {loc} in {time.time() - start:.1f}s")
                 return loc

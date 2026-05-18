@@ -1,5 +1,6 @@
 from .base_screen import BaseScreen
 from core.ocr import read_number
+from core.vision import vision
 import logging
 import time
 
@@ -12,6 +13,20 @@ DEPLOY_TAP_INTERVAL = 0.15
 # Seconds to wait for a battle to fully resolve before timing out.
 BATTLE_TIMEOUT = 180
 
+FIND_A_MATCH_TEMPLATES = (
+    "ui/attack/btn_find_a_match",
+    "ui/attack/start_button",
+    "ui/attack/start_button_2",
+)
+NEXT_ENEMY_TEMPLATES = ("btn_next_enemy", "ui/attack/next_button")
+ATTACK_CONFIRM_TEMPLATES = (
+    "btn_attack_confirm",
+    "ui/attack/start_button_2",
+    "ui/attack/start_button",
+)
+RETURN_HOME_TEMPLATES = ("btn_return_home", "ui/battle/end_battle", "ui/battle/end")
+FIND_A_MATCH_THRESHOLD = 0.65
+
 
 class AttackScreen(BaseScreen):
     def __init__(self, ui_manager, settings):
@@ -19,22 +34,28 @@ class AttackScreen(BaseScreen):
         self.settings = settings
 
     def is_current_screen(self):
-        found = self.ui_manager.scan_all(["btn_find_a_match"], use_orb_fallback=False)
+        found = self.ui_manager.scan_all(
+            self._existing_templates(FIND_A_MATCH_TEMPLATES),
+            use_orb_fallback=False,
+        )
         return bool(found)
 
     def run_attack_cycle(self):
-        """Full farm attack cycle: find match → evaluate loot → attack → deploy → return.
+        """Full farm attack cycle: find match -> evaluate loot -> attack -> deploy -> return.
 
         Called from the main loop when on the home screen. Returns when back on the
         home screen (or after a bail-out recovery). A missing template is treated as
-        'not ready' and the cycle exits cleanly without crashing the bot.
+        "not ready" and the cycle exits cleanly without crashing the bot.
         """
         farm = self.settings.get("farm", {})
         attack_cfg = self.settings.get("attack", {})
 
         # --- step 1: tap the Attack! button on the home screen ---
-        loc = self.ui_manager.wait_until_appears("home_attack_button_1600x900", timeout=5,
-                                                  silent=True)
+        loc = self.ui_manager.wait_until_appears(
+            "ui/home/home_attack_button_1600x900",
+            timeout=5,
+            silent=True,
+        )
         if not loc:
             logger.debug("Attack button not found; skipping attack cycle.")
             return
@@ -42,9 +63,13 @@ class AttackScreen(BaseScreen):
         logger.info("Tapped Attack! button.")
 
         # --- step 2: wait for the Find a Match preparation screen ---
-        loc = self.ui_manager.wait_until_appears("btn_find_a_match", timeout=15)
+        loc = self._wait_until_any_appears(
+            FIND_A_MATCH_TEMPLATES,
+            timeout=15,
+            threshold=FIND_A_MATCH_THRESHOLD,
+        )
         if not loc:
-            logger.warning("Find a Match button not found — bailing out of attack cycle.")
+            logger.warning("Find a Match button not found - bailing out of attack cycle.")
             self._bail()
             return
 
@@ -58,7 +83,7 @@ class AttackScreen(BaseScreen):
 
             screen = self.ui_manager.device.get_screen()
             if screen is None:
-                logger.warning("No screen after match load — bailing.")
+                logger.warning("No screen after match load - bailing.")
                 self._bail()
                 return
 
@@ -72,22 +97,22 @@ class AttackScreen(BaseScreen):
 
             # --- step 4: decide attack or skip ---
             if self._meets_threshold(loot, farm):
-                logger.info("Loot meets threshold — attacking!")
+                logger.info("Loot meets threshold - attacking!")
                 if not self._confirm_attack():
-                    logger.warning("Attack confirm button not found — bailing.")
+                    logger.warning("Attack confirm button not found - bailing.")
                     self._bail()
                     return
                 break
 
-            logger.info("Loot below threshold — skipping base.")
-            loc = self.ui_manager.wait_until_appears("btn_next_enemy", timeout=5)
+            logger.info("Loot below threshold - skipping base.")
+            loc = self._wait_until_any_appears(NEXT_ENEMY_TEMPLATES, timeout=5)
             if not loc:
-                logger.warning("Next button not found — bailing.")
+                logger.warning("Next button not found - bailing.")
                 self._bail()
                 return
             skips += 1
         else:
-            logger.warning(f"Reached max skips ({MAX_SKIP}) — bailing.")
+            logger.warning(f"Reached max skips ({MAX_SKIP}) - bailing.")
             self._bail()
             return
 
@@ -97,7 +122,7 @@ class AttackScreen(BaseScreen):
 
         # --- step 6: wait for battle to end ---
         logger.info(f"Troops deployed. Waiting up to {BATTLE_TIMEOUT}s for battle end...")
-        loc = self.ui_manager.wait_until_appears("btn_return_home", timeout=BATTLE_TIMEOUT)
+        loc = self._wait_until_any_appears(RETURN_HOME_TEMPLATES, timeout=BATTLE_TIMEOUT)
         if not loc:
             logger.warning("Return Home button not found after battle timeout.")
             self._bail()
@@ -132,7 +157,7 @@ class AttackScreen(BaseScreen):
         )
 
     def _confirm_attack(self):
-        loc = self.ui_manager.wait_until_appears("btn_attack_confirm", timeout=5)
+        loc = self._wait_until_any_appears(ATTACK_CONFIRM_TEMPLATES, timeout=5)
         if not loc:
             return False
         self.ui_manager.click(*loc)
@@ -154,9 +179,25 @@ class AttackScreen(BaseScreen):
 
     def _bail(self):
         """Best-effort recovery: tap Return Home if visible, then close popups."""
-        loc = self.ui_manager.wait_until_appears("btn_return_home", timeout=5, silent=True)
+        loc = self._wait_until_any_appears(RETURN_HOME_TEMPLATES, timeout=5, silent=True)
         if loc:
             self.ui_manager.click(*loc)
             logger.info("Return Home tapped (bail recovery).")
             time.sleep(3)
         self.close_popups()
+
+    def _existing_templates(self, candidates):
+        existing = [name for name in candidates if name in vision.cache]
+        return existing or list(candidates)
+
+    def _wait_until_any_appears(self, candidates, timeout=5, silent=False, threshold=0.7):
+        for template_name in self._existing_templates(candidates):
+            loc = self.ui_manager.wait_until_appears(
+                template_name,
+                timeout=timeout,
+                silent=silent,
+                threshold=threshold,
+            )
+            if loc:
+                return loc
+        return None
