@@ -138,9 +138,11 @@ def read_number_with_confidence(
         for val_i, conf_i, raw_i in pool:
             grouped[val_i].append((conf_i, raw_i))
         # Prefer value seen multiple times across preprocessing variants.
+        # On ties, prefer higher confidence then larger numeric value
+        # (helps disambiguate common 1 vs 7 misreads in game fonts).
         best_val = max(
             grouped.keys(),
-            key=lambda v: (len(grouped[v]), max(c for c, _ in grouped[v])),
+            key=lambda v: (len(grouped[v]), max(c for c, _ in grouped[v]), v),
         )
         conf, raw = max(grouped[best_val], key=lambda x: x[0])
         val = best_val

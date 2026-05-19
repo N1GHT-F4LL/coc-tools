@@ -14,7 +14,7 @@
   "farm": {
     "min_gold": 500000,
     "min_elixir": 500000,
-    "min_dark_elixir": 5000
+    "min_dark_elixir": 500000
   },
   "delays": {
     "short_min": 0.5,
@@ -43,9 +43,9 @@
     },
     "loot_regions": {
       "_note": "Fallback OCR regions if icon detect misses.",
-      "gold": [20, 120, 250, 160],
-      "elixir": [20, 160, 250, 210],
-      "dark_elixir": [20, 220, 250, 260]
+      "gold": [0, 120, 250, 160],
+      "elixir": [0, 160, 250, 210],
+      "dark_elixir": [0, 220, 250, 260]
     },
     "deploy": {
       "_note": "Deployment sweep along the bottom edge of the battlefield at 1600x900.",

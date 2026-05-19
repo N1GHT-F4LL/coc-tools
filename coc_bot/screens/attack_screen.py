@@ -6,6 +6,7 @@ import time
 import os
 from datetime import datetime
 import cv2
+import numpy as np
 
 logger = logging.getLogger(__name__)
 
@@ -375,6 +376,8 @@ class AttackScreen(BaseScreen):
             logger.debug(f"[ICON_DEBUG] {loot_key}: no candidate templates configured")
             return None
 
+        icon_scales = (0.20, 0.25, 0.30, 0.35, 0.40, 0.50, 0.60, 0.75, 1.00)
+
         crop = screen
         roi_x1 = roi_y1 = 0
         if search_roi and len(search_roi) == 4:
@@ -390,12 +393,23 @@ class AttackScreen(BaseScreen):
 
         gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
         best = None
+        max_y_delta = {
+            "gold": 18,
+            "elixir": 18,
+            "dark_elixir": 18,
+        }.get(loot_key, 18)
+
         for tpl_name in templates:
             template = vision.cache.get(tpl_name)
             if template is None:
                 logger.debug(f"[ICON_DEBUG] {loot_key}: template={tpl_name} missing from cache")
                 continue
-            score, scaled, result_map = vision._find_best_scale(gray, template, threshold=0.56)
+            score, scaled, result_map = vision._find_best_scale(
+                gray,
+                template,
+                threshold=0.56,
+                scales=icon_scales,
+            )
             if result_map is None or scaled is None:
                 logger.debug(f"[ICON_DEBUG] {loot_key}: template={tpl_name} produced no usable match map")
                 continue
@@ -415,11 +429,20 @@ class AttackScreen(BaseScreen):
             if cx > 130 or cx < 8:
                 logger.debug(f"[ICON_DEBUG] {loot_key}: REJECTED (cx out of bounds: {cx})")
                 continue
+            if target_y is not None and abs(cy - int(target_y)) > max_y_delta:
+                logger.debug(
+                    f"[ICON_DEBUG] {loot_key}: REJECTED (cy out of row band: cy={cy}, target_y={target_y}, max_y_delta={max_y_delta})"
+                )
+                continue
 
             # Prefer correct row; small penalty if y differs from expected.
-            rank = score
+            color_bonus = self._resource_color_bonus(screen, cx, cy, loot_key)
+            rank = score + color_bonus
             if target_y is not None:
                 rank -= min(abs(cy - int(target_y)), 60) * 0.01
+            logger.debug(
+                f"[ICON_DEBUG] {loot_key}: template={tpl_name}, rank={rank:.3f}, color_bonus={color_bonus:.3f}"
+            )
 
             if best is None or rank > best[0]:
                 best = (rank, cx, cy, float(score))
@@ -428,6 +451,41 @@ class AttackScreen(BaseScreen):
             return None
         logger.debug(f"[ICON_DEBUG] {loot_key}: SELECTED cx={best[1]}, cy={best[2]}, score={best[3]}")
         return (best[1], best[2], best[3])
+
+    def _resource_color_bonus(self, screen, cx, cy, loot_key):
+        """Small color prior to separate lookalike icons in grayscale matching."""
+        h, w = screen.shape[:2]
+        r = 8
+        x1 = max(0, cx - r)
+        x2 = min(w, cx + r + 1)
+        y1 = max(0, cy - r)
+        y2 = min(h, cy + r + 1)
+        if x2 <= x1 or y2 <= y1:
+            return 0.0
+
+        patch = screen[y1:y2, x1:x2]
+        hsv = cv2.cvtColor(patch, cv2.COLOR_BGR2HSV)
+        mean_h, mean_s, mean_v = np.mean(hsv.reshape(-1, 3), axis=0)
+
+        if loot_key == "elixir":
+            # Pink/purple: hue around 135-175 (OpenCV hue space), high saturation.
+            if 130 <= mean_h <= 178 and mean_s >= 70 and mean_v >= 50:
+                return 0.08
+            return -0.08
+
+        if loot_key == "dark_elixir":
+            # Dark droplet: low brightness, usually low-mid saturation.
+            if mean_v <= 75:
+                return 0.08
+            return -0.08
+
+        if loot_key == "gold":
+            # Yellow-ish: hue around 15-40 with moderate/high saturation.
+            if 12 <= mean_h <= 42 and mean_s >= 70 and mean_v >= 60:
+                return 0.06
+            return -0.06
+
+        return 0.0
 
     def _dump_loot_debug(self, screen, debug_regions, attack_cfg):
         if not attack_cfg.get("debug_loot_regions", False):
