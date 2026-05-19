@@ -157,7 +157,7 @@ class Vision:
             corners = np.float32([[0, 0], [w, 0], [w, h], [0, h]]).reshape(-1, 1, 2)
             center = np.mean(cv2.perspectiveTransform(corners, H), axis=0).flatten()
             cx, cy = int(center[0]), int(center[1])
-            logger.info(f"ORB fallback matched '{template_name}' at ({cx}, {cy}) with {len(good_matches)} features")
+            logger.debug(f"ORB fallback matched '{template_name}' at ({cx}, {cy}) with {len(good_matches)} features")
             return (cx, cy)
 
         except Exception as e:

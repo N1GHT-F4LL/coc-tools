@@ -282,7 +282,6 @@ class AttackScreen(BaseScreen):
                     continue
                 if best_region is not None and icon_region and tuple(best_region) == tuple(icon_region) and best_conf >= min_icon_conf:
                     continue
-                # Dark elixir is short and easy to misread; prefer stronger confidence.
                 if (
                     best_val is None
                     or c > best_conf
@@ -393,7 +392,7 @@ class AttackScreen(BaseScreen):
             score, scaled, result_map = vision._find_best_scale(
                 gray,
                 template,
-                threshold=0.56,
+                threshold=threshold,
                 scales=LOOT_ICON_SCALES,
             )
             if result_map is None or scaled is None:

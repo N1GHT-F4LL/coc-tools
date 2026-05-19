@@ -297,25 +297,6 @@ class Device:
         out = out.lower()
         return ("connected to" in out) or ("already connected to" in out)
 
-    def try_connect_common_emulators(self):
-        """
-        Try common local emulator ADB endpoints.
-        Returns number of successful/known connections.
-        """
-        endpoints = [
-            "127.0.0.1:5555",  # standard Android emulator
-            "127.0.0.1:5554",
-            "127.0.0.1:7555",  # MuMu
-            "127.0.0.1:62001", # Nox
-            "127.0.0.1:16384", # LDPlayer variants
-            "127.0.0.1:21503", # BlueStacks Hyper-V variants
-        ]
-        hits = 0
-        for ep in endpoints:
-            if self.connect_device(ep):
-                hits += 1
-        return hits
-
     def select_device(self, preferred_serial=None, auto_select_single=True):
         """
         Pick a target device and assign self.serial.
