@@ -127,7 +127,7 @@ class AttackScreen(BaseScreen):
         skips = 0
         while skips <= MAX_SKIP:
             # Ensure scout UI has settled before OCR.
-            time.sleep(1.0)
+            self.ui_manager._poll_sleep(1.0)
 
             screen = self.ui_manager.device.get_screen()
             if screen is None:
@@ -193,7 +193,7 @@ class AttackScreen(BaseScreen):
             return
 
         battle.tap_return_home(loc)
-        time.sleep(3)
+        self.ui_manager._poll_sleep(3)
         self.close_popups()
 
     # ------------------------------------------------------------------
@@ -596,7 +596,7 @@ class AttackScreen(BaseScreen):
         if loc:
             self.ui_manager.click(*loc)
             logger.info("Return Home tapped (bail recovery).")
-            time.sleep(3)
+            self.ui_manager._poll_sleep(3)
         self.close_popups()
 
     def _is_find_match_loc_valid(self, loc):

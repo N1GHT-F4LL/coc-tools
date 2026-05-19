@@ -1,46 +1,56 @@
 import os
+import json
 import cv2
 import logging
 from datetime import datetime
 from core.device import Device
 from core.vision import vision
+from core.logging_utils import setup_logging
 
 logger = logging.getLogger(__name__)
 
+
+def _load_settings():
+    try:
+        with open("coc_bot/settings.json") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
 def capture_live_screen():
     """Capture and save the current device screen for debugging."""
-    logging.basicConfig(level=logging.INFO, format='[%(levelname)s] %(message)s')
-    device = Device()
-    
+    settings = _load_settings()
+    serial = settings.get("device", {}).get("serial")
+    device = Device(serial=serial)
+
     if not device.available:
         print("ERROR: adb not available")
         return
-    
-    device._check_connection()
+
     screen = device.get_screen()
-    
+
     if screen is None:
         print("ERROR: Could not capture screen")
         return
-    
+
     debug_dir = os.path.join('coc_bot', 'logs', 'debug')
     os.makedirs(debug_dir, exist_ok=True)
-    
+
     ts = datetime.now().strftime('%Y%m%d_%H%M%S')
     out_path = os.path.join(debug_dir, f"live_screen_{ts}.png")
-    
+
     cv2.imwrite(out_path, screen)
     print(f"[OK] Screen captured: {out_path}")
     print(f"[OK] Resolution: {screen.shape[1]}x{screen.shape[0]} (width x height)")
 
+
 def list_loaded_assets(filter_keyword=None):
     """List all assets loaded in the vision cache."""
-    logging.basicConfig(level=logging.INFO, format='[%(levelname)s] %(message)s')
     vision.load_assets("coc_bot/assets")
-    
+
     print(f"\n[OK] Total assets loaded: {len(vision.cache)}")
-    
-    # Filter by keyword if provided
+
     if filter_keyword:
         filtered = {k: v for k, v in sorted(vision.cache.items()) if filter_keyword.lower() in k.lower()}
         print(f"\n[OK] Assets matching '{filter_keyword}':")
@@ -51,18 +61,21 @@ def list_loaded_assets(filter_keyword=None):
         for i, key in enumerate(sorted(vision.cache.keys()), 1):
             print(f"  {i:3d}. {key}")
 
+
 if __name__ == "__main__":
     import sys
-    
+
+    setup_logging(logging.INFO)
+
     if len(sys.argv) < 2:
         print("Usage:")
         print("  python debug_tools.py capture          - Capture current screen")
         print("  python debug_tools.py assets           - List all loaded assets")
         print("  python debug_tools.py assets <keyword> - List assets matching keyword (e.g., 'close', 'icon_', 'btn_')")
         sys.exit(1)
-    
+
     cmd = sys.argv[1].lower()
-    
+
     if cmd == "capture":
         capture_live_screen()
     elif cmd == "assets":

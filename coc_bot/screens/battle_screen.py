@@ -40,7 +40,7 @@ class BattleScreen(BaseScreen):
         while time.time() < deadline:
             if self.is_current_screen():
                 return True
-            time.sleep(0.5)
+            self.ui_manager._poll_sleep(0.5)
         return False
 
     def deploy_troops(self, deploy_cfg):
@@ -75,7 +75,7 @@ class BattleScreen(BaseScreen):
         if loc:
             self.ui_manager.click(*loc)
             logger.info("Return Home tapped (battle bail recovery).")
-            time.sleep(3)
+            self.ui_manager._poll_sleep(3)
         self.close_popups()
 
     # ------------------------------------------------------------------
@@ -135,7 +135,7 @@ class BattleScreen(BaseScreen):
                 f"count={'?' if count is None else count}, deploying {taps}×"
             )
             self.ui_manager.click(slot_cx, slot_cy)
-            time.sleep(0.3)
+            self.ui_manager._poll_sleep(0.3)
 
             self._execute_slot_strategy(slot, deploy_cfg, taps, tap_interval)
             any_deployed = True
@@ -166,7 +166,7 @@ class BattleScreen(BaseScreen):
             points = slot_cfg.get("points", [])
             for pt in points[:taps]:
                 self.ui_manager.click(int(pt[0]), int(pt[1]))
-                time.sleep(tap_interval)
+                self.ui_manager._poll_sleep(tap_interval)
         else:
             y       = int(slot_cfg.get("y",       deploy_cfg.get("battlefield_y",       750)))
             x_start = int(slot_cfg.get("x_start", deploy_cfg.get("battlefield_x_start", 300)))
@@ -174,7 +174,7 @@ class BattleScreen(BaseScreen):
             step = (x_end - x_start) / max(taps - 1, 1)
             for i in range(taps):
                 self.ui_manager.click(int(x_start + i * step), y)
-                time.sleep(tap_interval)
+                self.ui_manager._poll_sleep(tap_interval)
 
     def _sweep_deploy(self, deploy_cfg):
         y = int(deploy_cfg.get("y", 820))
@@ -187,4 +187,4 @@ class BattleScreen(BaseScreen):
         for i in range(taps):
             x = int(x_start + i * step)
             self.ui_manager.click(x, y)
-            time.sleep(DEPLOY_TAP_INTERVAL)
+            self.ui_manager._poll_sleep(DEPLOY_TAP_INTERVAL)

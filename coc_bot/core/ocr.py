@@ -140,16 +140,12 @@ def read_number_with_confidence(
             continue
         bounded.append((val, conf, raw))
 
-    if min_value is not None or max_value is not None:
-        # Respect numeric bounds strictly for targeted reads (e.g. dark elixir).
-        if not bounded:
-            logger.debug(
-                f"OCR: no bounded value in region {region} (min={min_value}, max={max_value}), raw_n={len(candidates)}"
-            )
-            return None, 0.0
-        pool = bounded
-    else:
-        pool = candidates
+    if not bounded:
+        logger.debug(
+            f"OCR: no bounded value in region {region} (min={min_value}, max={max_value}), raw_n={len(candidates)}"
+        )
+        return None, 0.0
+    pool = bounded
     if prefer_consensus:
         grouped = defaultdict(list)
         for val_i, conf_i, raw_i in pool:
