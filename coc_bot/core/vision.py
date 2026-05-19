@@ -15,6 +15,19 @@ DEFAULT_MATCH_SCALES = (1.0, 0.75, 1.25, 0.5, 1.5, 0.6, 0.85)
 class Vision:
     def __init__(self):
         self.cache = {}
+        # Resized template arrays keyed by (id(template), target_h, target_w).
+        # Templates are long-lived objects in self.cache, so id() is stable.
+        self._resize_cache = {}
+
+    def _get_scaled(self, template, nh, nw):
+        key = (id(template), nh, nw)
+        scaled = self._resize_cache.get(key)
+        if scaled is None:
+            th, tw = template.shape[:2]
+            interp = cv2.INTER_AREA if (nh < th or nw < tw) else cv2.INTER_CUBIC
+            scaled = cv2.resize(template, (nw, nh), interpolation=interp)
+            self._resize_cache[key] = scaled
+        return scaled
 
     def load_assets(self, asset_dir="assets"):
         logger.info(f"Loading assets from {asset_dir} into RAM cache...")
@@ -48,18 +61,15 @@ class Vision:
             nh, nw = int(th * s), int(tw * s)
             if nh < 8 or nw < 8 or nh > sh or nw > sw:
                 continue
-            scaled = template if s == 1.0 else cv2.resize(
-                template, (nw, nh),
-                interpolation=cv2.INTER_AREA if s < 1.0 else cv2.INTER_CUBIC,
-            )
+            scaled = template if s == 1.0 else self._get_scaled(template, nh, nw)
             result_map = cv2.matchTemplate(screen_gray, scaled, cv2.TM_CCOEFF_NORMED)
             _, mv, _, _ = cv2.minMaxLoc(result_map)
             if mv > best_val:
                 best_val = mv
                 best_scaled = scaled
                 best_result_map = result_map
-            # Strong native-scale hit: no need to scan further scales.
-            if s == 1.0 and mv >= threshold:
+            # Stop scanning once a strong match is found at any scale.
+            if mv >= threshold + 0.15 or (s == 1.0 and mv >= threshold):
                 break
 
         return best_val, best_scaled, best_result_map

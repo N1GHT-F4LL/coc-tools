@@ -7,6 +7,7 @@ from collections import defaultdict
 logger = logging.getLogger(__name__)
 
 _reader = None
+_OCR_EARLY_EXIT_CONF = 0.92  # skip remaining variants once this confidence is reached
 
 
 def _get_reader():
@@ -111,7 +112,11 @@ def read_number_with_confidence(
             decoder="beamsearch",
             batch_size=1,
         )
-        candidates.extend(_extract_digit_candidates(ocr_items))
+        new_cands = _extract_digit_candidates(ocr_items)
+        candidates.extend(new_cands)
+        # Consensus mode needs votes from multiple variants — never exit early.
+        if not prefer_consensus and new_cands and max(c for _, c, _ in new_cands) >= _OCR_EARLY_EXIT_CONF:
+            break
 
     if not candidates:
         logger.debug(f"OCR: no text in region {region}")

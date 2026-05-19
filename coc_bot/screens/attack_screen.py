@@ -248,6 +248,12 @@ class AttackScreen(BaseScreen):
             best_conf = 0.0
             best_region = None
             for idx, region in enumerate(candidate_regions):
+                # Skip the fallback region when the icon region already returned
+                # sufficient confidence — saves a full OCR pass per resource.
+                if (idx > 0 and icon_region and best_region is not None
+                        and tuple(best_region) == tuple(icon_region)
+                        and best_conf >= min_icon_conf):
+                    continue
                 val, c = read_number_with_confidence(
                     screen,
                     tuple(region),
@@ -258,8 +264,6 @@ class AttackScreen(BaseScreen):
                 )
                 if val is None:
                     continue
-                # Prefer icon-anchored region once it produces a plausible read.
-                # Fallback region is only allowed to replace it when icon confidence is weak.
                 is_icon_region = bool(icon_region) and idx == 0 and tuple(region) == tuple(icon_region)
                 if is_icon_region:
                     best_val = val
