@@ -34,7 +34,6 @@ class Humanize:
         points = []
         for i in range(steps + 1):
             t = i / float(steps)
-            # Quadratic Bezier formula
             x = (1 - t) ** 2 * sx + 2 * (1 - t) * t * cx + t ** 2 * ex
             y = (1 - t) ** 2 * sy + 2 * (1 - t) * t * cy + t ** 2 * ey
             points.append((int(round(x)), int(round(y))))

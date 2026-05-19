@@ -82,7 +82,7 @@ class UIManager:
             return True
         return False
 
-    def scan_all(self, template_names, use_orb_fallback=False):
+    def scan_all(self, template_names, use_orb_fallback=False, threshold=0.7):
         """Capture the screen once and find one instance of each template.
 
         Returns {name: (x, y)} for every template that matched. All templates
@@ -95,7 +95,7 @@ class UIManager:
         screen_gray = cv2.cvtColor(screen, cv2.COLOR_BGR2GRAY)
         found = {}
         for name in template_names:
-            loc = vision.find_template(screen_gray, name, use_orb_fallback=use_orb_fallback)
+            loc = vision.find_template(screen_gray, name, threshold=threshold, use_orb_fallback=use_orb_fallback)
             if loc:
                 found[name] = loc
         return found

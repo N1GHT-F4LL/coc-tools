@@ -13,6 +13,7 @@ import json
 import logging
 import threading
 import traceback
+import html as _html
 from pathlib import Path
 
 import cv2
@@ -25,7 +26,7 @@ from PyQt5.QtWidgets import (
     QHeaderView, QMessageBox, QSizePolicy,
 )
 from PyQt5.QtCore import Qt, QThread, QRunnable, QThreadPool, QObject, pyqtSignal
-from PyQt5.QtGui import QPixmap, QImage, QFont, QColor, QTextCursor
+from PyQt5.QtGui import QPixmap, QImage, QFont, QTextCursor
 
 # gui.py lives in coc_bot/ — same sys.path as main.py
 SETTINGS_PATH = os.path.join(os.path.dirname(__file__), "settings.json")
@@ -309,8 +310,7 @@ class MainWindow(QMainWindow):
             return
 
         color = {"ERROR": "#f55", "WARNING": "#fa0", "DEBUG": "#777"}.get(level, "#ccc")
-        self._log_view.setTextColor(QColor(color))
-        self._log_view.append(msg)
+        self._log_view.append(f'<span style="color:{color};">{_html.escape(msg)}</span>')
         self._log_view.moveCursor(QTextCursor.End)
 
         # Trim oldest lines when the log grows too long
