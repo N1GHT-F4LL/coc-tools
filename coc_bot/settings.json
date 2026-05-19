@@ -33,7 +33,12 @@
       "x_start_offset": -8,
       "x_end_offset": 236,
       "y_half_height": 19,
-      "search_roi": [0, 70, 420, 360],
+      "search_roi": [
+        0,
+        70,
+        420,
+        360
+      ],
       "per_resource": {
         "dark_elixir": {
           "threshold": 0.7,
@@ -43,34 +48,53 @@
     },
     "loot_regions": {
       "_note": "Fallback OCR regions if icon detect misses.",
-      "gold": [0, 120, 250, 160],
-      "elixir": [0, 160, 250, 210],
-      "dark_elixir": [0, 220, 250, 260]
+      "gold": [
+        0,
+        120,
+        250,
+        160
+      ],
+      "elixir": [
+        0,
+        160,
+        250,
+        210
+      ],
+      "dark_elixir": [
+        0,
+        220,
+        250,
+        260
+      ]
     },
     "deploy": {
       "_note": "mode=slot detects bar icons and taps each; mode=sweep does a bottom-edge tap sweep. Sweep params kept as fallback.",
       "mode": "slot",
-      "troop_bar_region": [200, 855, 1400, 910],
+      "troop_bar_region": [
+        200,
+        855,
+        1400,
+        910
+      ],
       "battlefield_y": 750,
       "battlefield_x_start": 300,
       "battlefield_x_end": 1300,
       "tap_interval": 0.15,
       "slots": [
         {
-          "template": "units/troops/barbarian",
-          "taps": 10,
-          "strategy": "line",
-          "y": 760,
-          "x_start": 300,
-          "x_end": 1300
-        },
-        {
-          "template": "units/troops/archer",
-          "taps": 15,
-          "strategy": "line",
-          "y": 760,
-          "x_start": 300,
-          "x_end": 1300
+          "template": "units/troops/thrower",
+          "taps": 16,
+          "strategy": "points",
+          "points": [
+            [
+              146,
+              385
+            ],
+            [
+              257,
+              306
+            ]
+          ]
         }
       ],
       "y": 820,
