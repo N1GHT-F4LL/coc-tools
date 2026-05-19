@@ -84,21 +84,6 @@ def _extract_digit_candidates(ocr_items):
     return out
 
 
-def read_number(
-    screen_bgr,
-    region,
-    min_value=0,
-    max_value=None,
-):
-    val, _conf = read_number_with_confidence(
-        screen_bgr,
-        region,
-        min_value=min_value,
-        max_value=max_value,
-    )
-    return val
-
-
 def read_number_with_confidence(
     screen_bgr,
     region,

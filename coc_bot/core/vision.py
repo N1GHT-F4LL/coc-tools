@@ -64,12 +64,12 @@ class Vision:
 
         return best_val, best_scaled, best_result_map
 
-    def find_template(self, screen_color, template_name, threshold=0.7, use_orb_fallback=True, scales=None):
-        if template_name not in self.cache or screen_color is None:
+    def find_template(self, screen, template_name, threshold=0.7, use_orb_fallback=True, scales=None):
+        if template_name not in self.cache or screen is None:
             return None
 
         template = self.cache[template_name]
-        screen_gray = cv2.cvtColor(screen_color, cv2.COLOR_BGR2GRAY)
+        screen_gray = cv2.cvtColor(screen, cv2.COLOR_BGR2GRAY) if screen.ndim == 3 else screen
 
         best_val, best_scaled, result_map = self._find_best_scale(
             screen_gray, template, threshold, scales

@@ -1,6 +1,5 @@
 from .base_screen import BaseScreen
 import logging
-import time
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +40,7 @@ class HomeScreen(BaseScreen):
             found.update(self.ui_manager.scan_all(remaining))
             remaining = [r for r in remaining if r not in found]
             if remaining:
-                time.sleep(0.3)
+                self.ui_manager._poll_sleep(0.3)
 
         if not found:
             logger.debug("No resource badges visible.")
@@ -53,7 +52,7 @@ class HomeScreen(BaseScreen):
 
         # Re-scan after animations clear; a badge still visible means the
         # ADB tap was dropped — click it once more.
-        time.sleep(0.6)
-        for name, loc in self.ui_manager.scan_all(list(found.keys())).items():
+        self.ui_manager._poll_sleep(0.6)
+        for name, loc in self.ui_manager.scan_all(found).items():
             logger.debug(f"Collecting '{name}' at {loc} (retry)")
             self.ui_manager.click(loc[0], loc[1])

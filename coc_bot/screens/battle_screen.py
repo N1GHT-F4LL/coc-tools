@@ -87,7 +87,7 @@ class BattleScreen(BaseScreen):
         if not slots:
             return False
 
-        screen = self.ui_manager.device.get_screen()
+        screen = self.ui_manager.get_screen()
         if screen is None:
             return False
 
@@ -159,32 +159,29 @@ class BattleScreen(BaseScreen):
             logger.debug(f"[DEPLOY] count OCR → {val} (conf={conf:.2f})")
         return val
 
+    def _tap_line(self, x_start, x_end, y, taps, interval):
+        step = (x_end - x_start) / max(taps - 1, 1)
+        for i in range(taps):
+            self.ui_manager.click(int(x_start + i * step), y)
+            self.ui_manager._poll_sleep(interval)
+
     def _execute_slot_strategy(self, slot_cfg, deploy_cfg, taps, tap_interval):
         strategy = slot_cfg.get("strategy", "line")
 
         if strategy == "points":
-            points = slot_cfg.get("points", [])
-            for pt in points[:taps]:
+            for pt in slot_cfg.get("points", [])[:taps]:
                 self.ui_manager.click(int(pt[0]), int(pt[1]))
                 self.ui_manager._poll_sleep(tap_interval)
         else:
             y       = int(slot_cfg.get("y",       deploy_cfg.get("battlefield_y",       750)))
             x_start = int(slot_cfg.get("x_start", deploy_cfg.get("battlefield_x_start", 300)))
             x_end   = int(slot_cfg.get("x_end",   deploy_cfg.get("battlefield_x_end",  1300)))
-            step = (x_end - x_start) / max(taps - 1, 1)
-            for i in range(taps):
-                self.ui_manager.click(int(x_start + i * step), y)
-                self.ui_manager._poll_sleep(tap_interval)
+            self._tap_line(x_start, x_end, y, taps, tap_interval)
 
     def _sweep_deploy(self, deploy_cfg):
         y = int(deploy_cfg.get("y", 820))
         x_start = int(deploy_cfg.get("x_start", 300))
         x_end = int(deploy_cfg.get("x_end", 1300))
         taps = int(deploy_cfg.get("taps", 30))
-
         logger.info(f"[DEPLOY] Sweep: {taps} taps along y={y} from x={x_start} to x={x_end}.")
-        step = (x_end - x_start) / max(taps - 1, 1)
-        for i in range(taps):
-            x = int(x_start + i * step)
-            self.ui_manager.click(x, y)
-            self.ui_manager._poll_sleep(DEPLOY_TAP_INTERVAL)
+        self._tap_line(x_start, x_end, y, taps, DEPLOY_TAP_INTERVAL)

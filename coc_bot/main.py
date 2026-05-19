@@ -82,19 +82,13 @@ def run_bot(settings, stop_event=None, non_interactive=False):
             logger.info("Home screen detected.")
             logger.info("Zooming out for full village view...")
             device.pinch('out', span_pixels=600, repeats=1)
-            time.sleep(1.0)
+            ui_manager._poll_sleep(1.0)
             break
-        time.sleep(1)
+        ui_manager._poll_sleep(1)
     else:
         logger.warning("Home screen not detected after 10 s. Continuing anyway...")
 
     logger.info("Bot running. Press Ctrl+C to stop.")
-
-    def _sleep(seconds):
-        if stop_event is not None:
-            stop_event.wait(seconds)
-        else:
-            time.sleep(seconds)
 
     home_misses = 0
     cycle = 0
@@ -114,7 +108,7 @@ def run_bot(settings, stop_event=None, non_interactive=False):
                     battle_screen.tap_return_home(loc)
                 else:
                     battle_screen.bail()
-                _sleep(3)
+                ui_manager._poll_sleep(3)
                 home_screen.close_popups()
                 continue
             else:
@@ -132,10 +126,10 @@ def run_bot(settings, stop_event=None, non_interactive=False):
                         break
                     home_misses = 0
                     logger.info("Waiting 15 s for game to reload...")
-                    _sleep(15)
+                    ui_manager._poll_sleep(15)
                     if home_screen.is_current_screen():
                         device.pinch('out', span_pixels=600, repeats=1)
-                        _sleep(1.0)
+                        ui_manager._poll_sleep(1.0)
                 continue
 
             home_screen.collect_resources()

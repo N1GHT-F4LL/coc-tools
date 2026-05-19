@@ -65,6 +65,9 @@ class UIManager:
             logger.exception(f"Failed to write debug screenshot: {e}")
         return None
 
+    def get_screen(self):
+        return self.device.get_screen()
+
     def click(self, x, y):
         jx, jy = self.humanize.get_jittered_coords(x, y)
         logger.debug(f"Tapping {jx}, {jy}")
@@ -74,15 +77,6 @@ class UIManager:
         """Quick click if element exists (for popup scanning with minimal wait)."""
         logger.debug(f"Quick checking if '{template_name}' exists...")
         loc = self.wait_until_appears(template_name, timeout=timeout, silent=True)
-        if loc:
-            self.click(loc[0], loc[1])
-            return True
-        return False
-
-    def click_if_exists(self, template_name):
-        """Check if element exists and click it."""
-        logger.debug(f"Checking if '{template_name}' exists...")
-        loc = self.wait_until_appears(template_name, timeout=1)
         if loc:
             self.click(loc[0], loc[1])
             return True
@@ -98,9 +92,10 @@ class UIManager:
         screen = self.device.get_screen()
         if screen is None:
             return {}
+        screen_gray = cv2.cvtColor(screen, cv2.COLOR_BGR2GRAY)
         found = {}
         for name in template_names:
-            loc = vision.find_template(screen, name, use_orb_fallback=use_orb_fallback)
+            loc = vision.find_template(screen_gray, name, use_orb_fallback=use_orb_fallback)
             if loc:
                 found[name] = loc
         return found

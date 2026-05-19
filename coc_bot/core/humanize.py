@@ -18,15 +18,11 @@ class Humanize:
         if control is None:
             sx, sy = start
             ex, ey = end
-            # midpoint
             mx, my = (sx + ex) / 2.0, (sy + ey) / 2.0
-            # random perpendicular offset
             dx, dy = ex - sx, ey - sy
-            # perpendicular vector
             px, py = -dy, dx
             norm = math.hypot(px, py) or 1.0
             ux, uy = px / norm, py / norm
-            # magnitude depends on distance
             dist = math.hypot(dx, dy)
             magnitude = dist * random.uniform(0.08, 0.18)
             control = (int(mx + ux * magnitude), int(my + uy * magnitude))

@@ -1,9 +1,8 @@
 from .base_screen import BaseScreen
-from .battle_screen import BattleScreen
+from .battle_screen import BattleScreen, RETURN_HOME_TEMPLATES
 from core.ocr import read_number_with_confidence
 from core.vision import vision
 import logging
-import time
 import os
 from datetime import datetime
 import cv2
@@ -16,11 +15,6 @@ LOOT_BOUNDS = {
     "gold": (0, 3000000),
     "elixir": (0, 3000000),
     "dark_elixir": (0, 50000),
-}
-LOOT_ICON_TEMPLATES = {
-    "gold": "icons/resources/icon_gold",
-    "elixir": "icons/resources/icon_elixir",
-    "dark_elixir": "icons/resources/icon_dark_elixir",
 }
 LOOT_ICON_CANDIDATE_TEMPLATES = {
     "gold": (
@@ -45,13 +39,6 @@ FIND_A_MATCH_TEMPLATES = (
 )
 NEXT_ENEMY_TEMPLATES = ("buttons/attack/btn_next_enemy",)
 START_MATCH_TEMPLATES = ("buttons/attack/btn_attack",)
-SCOUT_READY_TEMPLATES = (
-    "buttons/attack/btn_next_enemy",
-)
-RETURN_HOME_TEMPLATES = (
-    "buttons/battle/btn_return_home",
-    "buttons/battle/btn_end_battle",
-)
 FIND_A_MATCH_THRESHOLD = 0.65
 LOOT_ICON_SCALES = (0.20, 0.25, 0.30, 0.35, 0.40, 0.50, 0.60, 0.75, 1.00)
 
@@ -116,7 +103,7 @@ class AttackScreen(BaseScreen):
 
         # Wait until matchmaking lands on a real opponent scout screen.
         scout_loc = self._wait_until_any_appears(
-            SCOUT_READY_TEMPLATES,
+            NEXT_ENEMY_TEMPLATES,
             timeout=35,
             use_orb_fallback=False,
         )
@@ -129,14 +116,14 @@ class AttackScreen(BaseScreen):
             # Ensure scout UI has settled before OCR.
             self.ui_manager._poll_sleep(1.0)
 
-            screen = self.ui_manager.device.get_screen()
+            screen = self.ui_manager.get_screen()
             if screen is None:
                 logger.warning("No screen after match load - bailing.")
                 self._bail()
                 return
 
             # --- step 4: OCR the loot numbers ---
-            loot, conf = self._read_loot(screen)
+            loot, conf = self._read_loot(screen, attack_cfg)
             logger.info(
                 f"Enemy loot  gold={loot['gold']:,} (c={conf['gold']:.2f})  "
                 f"elixir={loot['elixir']:,} (c={conf['elixir']:.2f})  "
@@ -162,7 +149,7 @@ class AttackScreen(BaseScreen):
             self.ui_manager.click(*loc)
             logger.debug("Tapped Next Enemy.")
             ready = self._wait_until_any_appears(
-                SCOUT_READY_TEMPLATES,
+                NEXT_ENEMY_TEMPLATES,
                 timeout=20,
                 silent=True,
                 use_orb_fallback=False,
@@ -200,11 +187,10 @@ class AttackScreen(BaseScreen):
     # Helpers
     # ------------------------------------------------------------------
 
-    def _read_loot(self, screen):
+    def _read_loot(self, screen, attack_cfg):
         result = {"gold": 0, "elixir": 0, "dark_elixir": 0}
         conf = {"gold": 0.0, "elixir": 0.0, "dark_elixir": 0.0}
         debug_regions = {}
-        attack_cfg = self.settings.get("attack", {})
         by_icon_cfg = attack_cfg.get("loot_by_icon", {})
         icon_threshold = float(by_icon_cfg.get("threshold", 0.62))
         x_start = int(by_icon_cfg.get("x_start_offset", 18))
@@ -361,25 +347,28 @@ class AttackScreen(BaseScreen):
                 out[key] = [int(x1), int(y1), int(x2), int(y2)]
         return out
 
+    @staticmethod
+    def _apply_search_roi(screen, search_roi):
+        """Clamp and apply a search ROI crop. Returns (crop, roi_x1, roi_y1)."""
+        if not (search_roi and len(search_roi) == 4):
+            return screen, 0, 0
+        sx1, sy1, sx2, sy2 = [int(v) for v in search_roi]
+        h, w = screen.shape[:2]
+        sx1 = max(0, min(w - 1, sx1))
+        sx2 = max(1, min(w, sx2))
+        sy1 = max(0, min(h - 1, sy1))
+        sy2 = max(1, min(h, sy2))
+        if sx2 > sx1 and sy2 > sy1:
+            return screen[sy1:sy2, sx1:sx2], sx1, sy1
+        return screen, 0, 0
+
     def _find_best_resource_icon_match(self, screen, loot_key, search_roi=None, target_y=None, threshold=0.56):
         templates = LOOT_ICON_CANDIDATE_TEMPLATES.get(loot_key, ())
         if not templates:
             logger.debug(f"[ICON_DEBUG] {loot_key}: no candidate templates configured")
             return None
 
-        crop = screen
-        roi_x1 = roi_y1 = 0
-        if search_roi and len(search_roi) == 4:
-            sx1, sy1, sx2, sy2 = [int(v) for v in search_roi]
-            h, w = screen.shape[:2]
-            sx1 = max(0, min(w - 1, sx1))
-            sx2 = max(1, min(w, sx2))
-            sy1 = max(0, min(h - 1, sy1))
-            sy2 = max(1, min(h, sy2))
-            if sx2 > sx1 and sy2 > sy1:
-                crop = screen[sy1:sy2, sx1:sx2]
-                roi_x1, roi_y1 = sx1, sy1
-
+        crop, roi_x1, roi_y1 = self._apply_search_roi(screen, search_roi)
         gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
         best = None
         max_y_delta = 18
@@ -535,26 +524,11 @@ class AttackScreen(BaseScreen):
         y_half_height=19,
         search_roi=None,
     ):
-        template = LOOT_ICON_TEMPLATES.get(loot_key)
-        if not template:
-            return None
-
-        crop = screen
-        roi_x1 = roi_y1 = 0
-        if search_roi and len(search_roi) == 4:
-            sx1, sy1, sx2, sy2 = [int(v) for v in search_roi]
-            h, w = screen.shape[:2]
-            sx1 = max(0, min(w - 1, sx1))
-            sx2 = max(1, min(w, sx2))
-            sy1 = max(0, min(h - 1, sy1))
-            sy2 = max(1, min(h, sy2))
-            if sx2 > sx1 and sy2 > sy1:
-                crop = screen[sy1:sy2, sx1:sx2]
-                roi_x1, roi_y1 = sx1, sy1
-
+        template_name = LOOT_ICON_CANDIDATE_TEMPLATES[loot_key][0]
+        crop, roi_x1, roi_y1 = self._apply_search_roi(screen, search_roi)
         icon_loc = vision.find_template(
             crop,
-            template,
+            template_name,
             threshold=threshold,
             use_orb_fallback=False,
         )
@@ -609,7 +583,3 @@ class AttackScreen(BaseScreen):
         # Next Enemy appears on the right side during scout screen.
         return 900 <= x <= 1595 and 280 <= y <= 860
 
-    def _is_return_home_loc_valid(self, loc):
-        x, y = loc
-        # Return Home appears near the center-lower area on results screen.
-        return 350 <= x <= 1250 and 350 <= y <= 860
