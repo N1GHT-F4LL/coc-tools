@@ -13,6 +13,7 @@ from core.logging_utils import setup_logging
 from core.ocr import warmup_ocr
 from screens.home_screen import HomeScreen
 from screens.attack_screen import AttackScreen
+from screens.battle_screen import BattleScreen
 
 SETTINGS_PATH = "coc_bot/settings.json"
 COC_PACKAGE = "com.supercell.clashofclans"
@@ -74,6 +75,7 @@ def main():
 
     home_screen = HomeScreen(ui_manager)
     attack_screen = AttackScreen(ui_manager, settings)
+    battle_screen = BattleScreen(ui_manager)
 
     logger.info("Waiting for home screen to load...")
     deadline = time.time() + 10
@@ -100,6 +102,18 @@ def main():
 
             if home_screen.is_current_screen():
                 home_misses = 0
+            elif battle_screen.is_current_screen():
+                # Bot restarted or recovered while a battle was in progress.
+                home_misses = 0
+                logger.warning("Mid-battle state detected — waiting for battle end before resuming.")
+                loc = battle_screen.wait_for_end()
+                if loc:
+                    battle_screen.tap_return_home(loc)
+                else:
+                    battle_screen.bail()
+                time.sleep(3)
+                home_screen.close_popups()
+                continue
             else:
                 home_misses += 1
                 logger.warning(

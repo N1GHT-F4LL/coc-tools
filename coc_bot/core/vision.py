@@ -34,12 +34,7 @@ class Vision:
         logger.info(f"Loaded {count} assets into RAM.")
 
     def _find_best_scale(self, screen_gray, template, threshold, scales=None):
-        """Iterate scales, run matchTemplate at each, return (best_val, scaled, result_map).
-
-        result_map is the TM_CCOEFF_NORMED output at the winning scale so callers
-        can reuse it directly instead of re-running matchTemplate.
-        Returns (best_val, None, None) when best_val < threshold.
-        """
+        """Try each scale; return (best_val, best_scaled, result_map) or (best_val, None, None) if below threshold."""
         if scales is None:
             scales = DEFAULT_MATCH_SCALES
         th, tw = template.shape[:2]
@@ -97,10 +92,7 @@ class Vision:
         return None
 
     def find_all_matches(self, screen_color, template_name, threshold=0.7, min_distance=40):
-        """Find all non-overlapping instances of template_name via NMS.
-
-        Returns a list of (cx, cy) centers for every match above threshold.
-        """
+        """Return (cx, cy) centers for all non-overlapping matches above threshold (NMS)."""
         if template_name not in self.cache or screen_color is None:
             return []
 

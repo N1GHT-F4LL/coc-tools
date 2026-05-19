@@ -12,8 +12,25 @@ _reader = None
 def _get_reader():
     global _reader
     if _reader is None:
-        logger.info("Initializing OCR reader (first use, may take ~10s)...")
+        import warnings
         import easyocr
+        # EasyOCR sets pin_memory=True in its DataLoader even when gpu=False, which
+        # triggers a spurious PyTorch warning on CPU-only machines.
+        warnings.filterwarnings(
+            "ignore",
+            message="'pin_memory' argument is set as true",
+            category=UserWarning,
+        )
+        # EasyOCR's beam-search decoder accumulates floating-point probabilities that
+        # can overflow to inf on ambiguous crops; the decoder handles inf gracefully so
+        # the warning is noise.
+        warnings.filterwarnings(
+            "ignore",
+            message="overflow encountered in scalar add",
+            category=RuntimeWarning,
+            module="easyocr",
+        )
+        logger.info("Initializing OCR reader (first use, may take ~10s)...")
         _reader = easyocr.Reader(["en"], gpu=False, verbose=False)
         logger.info("OCR reader ready.")
     return _reader
@@ -138,8 +155,7 @@ def read_number_with_confidence(
         for val_i, conf_i, raw_i in pool:
             grouped[val_i].append((conf_i, raw_i))
         # Prefer value seen multiple times across preprocessing variants.
-        # On ties, prefer higher confidence then larger numeric value
-        # (helps disambiguate common 1 vs 7 misreads in game fonts).
+        # Tie-break by confidence then larger value — guards against 1↔7 misreads.
         best_val = max(
             grouped.keys(),
             key=lambda v: (len(grouped[v]), max(c for c, _ in grouped[v]), v),

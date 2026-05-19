@@ -14,7 +14,7 @@
   "farm": {
     "min_gold": 500000,
     "min_elixir": 500000,
-    "min_dark_elixir": 500000
+    "min_dark_elixir": 500
   },
   "delays": {
     "short_min": 0.5,
@@ -48,7 +48,17 @@
       "dark_elixir": [0, 220, 250, 260]
     },
     "deploy": {
-      "_note": "Deployment sweep along the bottom edge of the battlefield at 1600x900.",
+      "_note": "mode=slot detects bar icons and taps each; mode=sweep does a bottom-edge tap sweep. Sweep params kept as fallback.",
+      "mode": "slot",
+      "troop_bar_region": [200, 855, 1400, 910],
+      "battlefield_y": 750,
+      "battlefield_x_start": 300,
+      "battlefield_x_end": 1300,
+      "tap_interval": 0.15,
+      "slots": [
+        {"template": "units/troops/barbarian", "taps": 10},
+        {"template": "units/troops/archer", "taps": 10}
+      ],
       "y": 820,
       "x_start": 300,
       "x_end": 1300,

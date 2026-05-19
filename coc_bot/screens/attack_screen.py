@@ -1,4 +1,5 @@
 from .base_screen import BaseScreen
+from .battle_screen import BattleScreen
 from core.ocr import read_number_with_confidence
 from core.vision import vision
 import logging
@@ -6,16 +7,11 @@ import time
 import os
 from datetime import datetime
 import cv2
-import numpy as np
 
 logger = logging.getLogger(__name__)
 
 # How many consecutive bases to skip before giving up the cycle.
 MAX_SKIP = 50
-# Time between each troop-deployment tap (seconds).
-DEPLOY_TAP_INTERVAL = 0.15
-# Seconds to wait for a battle to fully resolve before timing out.
-BATTLE_TIMEOUT = 180
 LOOT_BOUNDS = {
     "gold": (0, 3000000),
     "elixir": (0, 3000000),
@@ -57,6 +53,7 @@ RETURN_HOME_TEMPLATES = (
     "buttons/battle/btn_end_battle",
 )
 FIND_A_MATCH_THRESHOLD = 0.65
+LOOT_ICON_SCALES = (0.20, 0.25, 0.30, 0.35, 0.40, 0.50, 0.60, 0.75, 1.00)
 
 
 class AttackScreen(BaseScreen):
@@ -180,27 +177,22 @@ class AttackScreen(BaseScreen):
             self._bail()
             return
 
-        # --- step 5: deploy troops along the chosen edge ---
-        time.sleep(1.5)  # battle intro animation
-        self._deploy_troops(attack_cfg.get("deploy", {}))
-
-        # --- step 6: wait for battle to end ---
-        logger.info(f"Troops deployed. Waiting up to {BATTLE_TIMEOUT}s for battle end...")
-        loc = self._wait_until_any_appears(
-            RETURN_HOME_TEMPLATES,
-            timeout=BATTLE_TIMEOUT,
-            use_orb_fallback=False,
-            validator=self._is_return_home_loc_valid,
-        )
-        if not loc:
-            logger.warning("Return Home button not found after battle timeout.")
+        # --- step 5: wait for battle screen, deploy troops, wait for end ---
+        battle = BattleScreen(self.ui_manager)
+        if not battle.wait_until_entered(timeout=15):
+            logger.warning("Battle screen not detected after loot threshold — bailing.")
             self._bail()
             return
 
-        self.ui_manager.click(*loc)
-        logger.info("Tapped Return Home.")
+        battle.deploy_troops(attack_cfg.get("deploy", {}))
 
-        # --- step 7: wait for results screens to clear ---
+        loc = battle.wait_for_end()
+        if not loc:
+            logger.warning("Battle end timeout.")
+            battle.bail()
+            return
+
+        battle.tap_return_home(loc)
         time.sleep(3)
         self.close_popups()
 
@@ -376,8 +368,6 @@ class AttackScreen(BaseScreen):
             logger.debug(f"[ICON_DEBUG] {loot_key}: no candidate templates configured")
             return None
 
-        icon_scales = (0.20, 0.25, 0.30, 0.35, 0.40, 0.50, 0.60, 0.75, 1.00)
-
         crop = screen
         roi_x1 = roi_y1 = 0
         if search_roi and len(search_roi) == 4:
@@ -393,11 +383,7 @@ class AttackScreen(BaseScreen):
 
         gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
         best = None
-        max_y_delta = {
-            "gold": 18,
-            "elixir": 18,
-            "dark_elixir": 18,
-        }.get(loot_key, 18)
+        max_y_delta = 18
 
         for tpl_name in templates:
             template = vision.cache.get(tpl_name)
@@ -408,7 +394,7 @@ class AttackScreen(BaseScreen):
                 gray,
                 template,
                 threshold=0.56,
-                scales=icon_scales,
+                scales=LOOT_ICON_SCALES,
             )
             if result_map is None or scaled is None:
                 logger.debug(f"[ICON_DEBUG] {loot_key}: template={tpl_name} produced no usable match map")
@@ -465,7 +451,7 @@ class AttackScreen(BaseScreen):
 
         patch = screen[y1:y2, x1:x2]
         hsv = cv2.cvtColor(patch, cv2.COLOR_BGR2HSV)
-        mean_h, mean_s, mean_v = np.mean(hsv.reshape(-1, 3), axis=0)
+        mean_h, mean_s, mean_v, _ = cv2.mean(hsv)
 
         if loot_key == "elixir":
             # Pink/purple: hue around 135-175 (OpenCV hue space), high saturation.
@@ -605,20 +591,6 @@ class AttackScreen(BaseScreen):
         self.ui_manager.click(*loc)
         return True
 
-    def _deploy_troops(self, deploy_cfg):
-        """Sweep taps along the deployment edge to drop all troops."""
-        y = deploy_cfg.get("y", 820)
-        x_start = deploy_cfg.get("x_start", 300)
-        x_end = deploy_cfg.get("x_end", 1300)
-        taps = deploy_cfg.get("taps", 30)
-
-        logger.info(f"Deploying {taps} taps along y={y} from x={x_start} to x={x_end}.")
-        step = (x_end - x_start) / max(taps - 1, 1)
-        for i in range(taps):
-            x = int(x_start + i * step)
-            self.ui_manager.click(x, y)
-            time.sleep(DEPLOY_TAP_INTERVAL)
-
     def _bail(self):
         """Best-effort recovery: tap Return Home if visible, then close popups."""
         loc = self._wait_until_any_appears(RETURN_HOME_TEMPLATES, timeout=5, silent=True, use_orb_fallback=False)
@@ -627,31 +599,6 @@ class AttackScreen(BaseScreen):
             logger.info("Return Home tapped (bail recovery).")
             time.sleep(3)
         self.close_popups()
-
-    def _existing_templates(self, candidates):
-        existing = [name for name in candidates if name in vision.cache]
-        return existing or list(candidates)
-
-    def _wait_until_any_appears(
-        self,
-        candidates,
-        timeout=5,
-        silent=False,
-        threshold=0.7,
-        use_orb_fallback=True,
-        validator=None,
-    ):
-        for template_name in self._existing_templates(candidates):
-            loc = self.ui_manager.wait_until_appears(
-                template_name,
-                timeout=timeout,
-                silent=silent,
-                threshold=threshold,
-                use_orb_fallback=use_orb_fallback,
-            )
-            if loc and (validator is None or validator(loc)):
-                return loc
-        return None
 
     def _is_find_match_loc_valid(self, loc):
         x, y = loc

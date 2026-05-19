@@ -887,13 +887,6 @@ class Device:
             except FileNotFoundError:
                 logger.error("adb binary not found when attempting to swipe.")
 
-# By default, serial is None, which means ADB uses the only connected device.
-# Change this to e.g., device = Device("emulator-5554") if you have multiple devices.
-# To use the device, create an instance in your runtime entrypoint (e.g. `main.py`):
-# from core.device import Device
-# device = Device()
-
-
 def connect_with_profile(device, profile, endpoint=None):
     device.start_adb_server()
     if profile == "custom_endpoint" and endpoint:
@@ -1113,7 +1106,7 @@ def bootstrap_device(settings, save_settings, logger):
         endpoint=endpoint,
     )
     if not getattr(device, "available", False):
-        logger.error("\n' adb' not found in your PATH. The bot requires adb to interact with a device.")
+        logger.error("\n'adb' not found in your PATH. The bot requires adb to interact with a device.")
         logger.error("Install Android platform-tools and ensure 'adb' is on your PATH, then re-run this script.")
         logger.error("On Windows, you can download from: https://developer.android.com/studio/releases/platform-tools")
         return None

@@ -15,9 +15,6 @@ class Humanize:
         return random.uniform(min_delay, max_delay)
 
     def bezier_curve(self, start, end, control, steps=10):
-        # Quadratic Bezier curve generator between start and end.
-        # start, end, control are (x,y) tuples. If control is None,
-        # choose a randomized control point to create a natural curve.
         if control is None:
             sx, sy = start
             ex, ey = end

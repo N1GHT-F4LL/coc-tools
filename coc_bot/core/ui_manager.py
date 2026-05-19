@@ -12,25 +12,18 @@ class UIManager:
         self.humanize = humanize
         self.device = device
 
-    def wait_until_appears(self, template_name, timeout=5, silent=False, use_orb_fallback=True, threshold=0.7): 
-        """
-        Wait for template to appear on screen.
-        
-        Args:
-            template_name: Name of the template to find
-            timeout: How long to wait in seconds
-            silent: If True, only log at debug level (no warning on timeout)
-        """
+    def wait_until_appears(self, template_name, timeout=5, silent=False, use_orb_fallback=True, threshold=0.7):
+        """Poll until template appears or timeout expires; returns (cx, cy) or None."""
         if not silent:
             logger.info(f"Waiting for '{template_name}'...")
         else:
             logger.debug(f"Waiting for '{template_name}'...")
-        
+
         start = time.time()
+        screen = None
         while time.time() - start < timeout:
             screen = self.device.get_screen()
             if screen is None:
-                # Could not obtain a screen capture; wait briefly and retry.
                 time.sleep(0.5)
                 continue
             loc = vision.find_template(
@@ -40,24 +33,23 @@ class UIManager:
                 use_orb_fallback=use_orb_fallback,
             )
             if loc:
-                logger.info(f"Found '{template_name}' at {loc} in {time.time() - start:.1f}s")
+                logger.debug(f"Found '{template_name}' at {loc} in {time.time() - start:.1f}s")
                 return loc
             time.sleep(0.5)
-        
+
         if not silent:
             logger.warning(f"Timeout waiting for '{template_name}'")
         else:
             logger.debug(f"Timeout waiting for '{template_name}'")
-        
-        # Save debug screenshot for post-mortem
+
+        # Reuse the last captured frame — no extra screencap needed.
         try:
-            debug_dir = os.path.join('coc_bot', 'logs', 'debug')
-            os.makedirs(debug_dir, exist_ok=True)
-            last_screen = self.device.get_screen()
-            if last_screen is not None:
+            if screen is not None:
+                debug_dir = os.path.join('coc_bot', 'logs', 'debug')
+                os.makedirs(debug_dir, exist_ok=True)
                 ts = datetime.now().strftime('%Y%m%d_%H%M%S')
                 out_path = os.path.join(debug_dir, f"timeout_{template_name}_{ts}.png")
-                cv2.imwrite(out_path, last_screen)
+                cv2.imwrite(out_path, screen)
                 logger.debug(f"Wrote debug screenshot: {out_path}")
         except Exception as e:
             logger.exception(f"Failed to write debug screenshot: {e}")
