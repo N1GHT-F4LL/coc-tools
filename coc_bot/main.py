@@ -41,16 +41,13 @@ def parse_args():
     return parser.parse_args()
 
 
-def main():
-    args = parse_args()
-    settings = load_settings()
-    humanize = Humanize(settings)
-    log_level_name = "DEBUG" if args.debug else args.log_level.upper()
-    log_level = getattr(logging, log_level_name, logging.INFO)
-    setup_logging(level=log_level)
+def run_bot(settings, stop_event=None, non_interactive=False):
+    """Core bot loop. Caller is responsible for configuring logging before calling."""
     logger = logging.getLogger(__name__)
+    humanize = Humanize(settings)
 
-    device = bootstrap_device(settings, save_settings, logger)
+    device = bootstrap_device(settings, save_settings, logger,
+                              non_interactive=non_interactive)
     if device is None:
         return
 
@@ -59,6 +56,7 @@ def main():
         return
 
     ui_manager = UIManager(humanize, device)
+    ui_manager.stop_event = stop_event  # propagate into all poll loops
     vision.load_assets("coc_bot/assets")
     warmup_ocr()
 
@@ -92,18 +90,23 @@ def main():
 
     logger.info("Bot running. Press Ctrl+C to stop.")
 
+    def _sleep(seconds):
+        if stop_event is not None:
+            stop_event.wait(seconds)
+        else:
+            time.sleep(seconds)
+
     home_misses = 0
     cycle = 0
 
     try:
-        while True:
+        while stop_event is None or not stop_event.is_set():
             cycle += 1
             logger.info(f"--- Cycle {cycle} ---")
 
             if home_screen.is_current_screen():
                 home_misses = 0
             elif battle_screen.is_current_screen():
-                # Bot restarted or recovered while a battle was in progress.
                 home_misses = 0
                 logger.warning("Mid-battle state detected — waiting for battle end before resuming.")
                 loc = battle_screen.wait_for_end()
@@ -111,7 +114,7 @@ def main():
                     battle_screen.tap_return_home(loc)
                 else:
                     battle_screen.bail()
-                time.sleep(3)
+                _sleep(3)
                 home_screen.close_popups()
                 continue
             else:
@@ -129,11 +132,10 @@ def main():
                         break
                     home_misses = 0
                     logger.info("Waiting 15 s for game to reload...")
-                    time.sleep(15)
-                    # Zoom out again after a restart so the village is centered.
+                    _sleep(15)
                     if home_screen.is_current_screen():
                         device.pinch('out', span_pixels=600, repeats=1)
-                        time.sleep(1.0)
+                        _sleep(1.0)
                 continue
 
             home_screen.collect_resources()
@@ -143,6 +145,14 @@ def main():
 
     except KeyboardInterrupt:
         logger.info("Bot stopped by user (Ctrl+C).")
+
+
+def main():
+    args = parse_args()
+    settings = load_settings()
+    log_level_name = "DEBUG" if args.debug else args.log_level.upper()
+    setup_logging(level=getattr(logging, log_level_name, logging.INFO))
+    run_bot(settings)
 
 
 if __name__ == "__main__":

@@ -55,5 +55,5 @@ class HomeScreen(BaseScreen):
         # ADB tap was dropped — click it once more.
         time.sleep(0.6)
         for name, loc in self.ui_manager.scan_all(list(found.keys())).items():
-            logger.info(f"Collecting '{name}' at {loc} (retry)")
+            logger.debug(f"Collecting '{name}' at {loc} (retry)")
             self.ui_manager.click(loc[0], loc[1])

@@ -160,7 +160,7 @@ class AttackScreen(BaseScreen):
                 self._bail()
                 return
             self.ui_manager.click(*loc)
-            logger.info("Tapped Next Enemy.")
+            logger.debug("Tapped Next Enemy.")
             ready = self._wait_until_any_appears(
                 SCOUT_READY_TEMPLATES,
                 timeout=20,
@@ -523,7 +523,7 @@ class AttackScreen(BaseScreen):
 
         full_path = os.path.join(out_dir, f"{ts}_full.png")
         cv2.imwrite(full_path, canvas)
-        logger.info(f"Loot debug images saved: {out_dir}")
+        logger.debug(f"Loot debug images saved: {out_dir}")
 
     def _region_from_icon(
         self,

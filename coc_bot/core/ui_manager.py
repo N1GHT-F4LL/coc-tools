@@ -11,20 +11,30 @@ class UIManager:
     def __init__(self, humanize, device):
         self.humanize = humanize
         self.device = device
+        self.stop_event = None  # set by run_bot; checked in all poll loops
+
+    def _stopped(self):
+        return self.stop_event is not None and self.stop_event.is_set()
+
+    def _poll_sleep(self, seconds=0.5):
+        """Sleep for `seconds`, but wake immediately if stop is requested."""
+        if self.stop_event is not None:
+            self.stop_event.wait(seconds)
+        else:
+            time.sleep(seconds)
 
     def wait_until_appears(self, template_name, timeout=5, silent=False, use_orb_fallback=True, threshold=0.7):
         """Poll until template appears or timeout expires; returns (cx, cy) or None."""
-        if not silent:
-            logger.info(f"Waiting for '{template_name}'...")
-        else:
-            logger.debug(f"Waiting for '{template_name}'...")
+        logger.debug(f"Waiting for '{template_name}'...")
 
         start = time.time()
         screen = None
         while time.time() - start < timeout:
+            if self._stopped():
+                return None
             screen = self.device.get_screen()
             if screen is None:
-                time.sleep(0.5)
+                self._poll_sleep()
                 continue
             loc = vision.find_template(
                 screen,
@@ -35,7 +45,7 @@ class UIManager:
             if loc:
                 logger.debug(f"Found '{template_name}' at {loc} in {time.time() - start:.1f}s")
                 return loc
-            time.sleep(0.5)
+            self._poll_sleep()
 
         if not silent:
             logger.warning(f"Timeout waiting for '{template_name}'")

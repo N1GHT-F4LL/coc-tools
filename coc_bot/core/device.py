@@ -1020,7 +1020,7 @@ def run_device_setup_wizard(device, settings, save_settings, logger):
     logger.info(f"Device selected and saved: {selected_serial}")
     return True
 
-def choose_profile_interactive(settings, save_settings, logger):
+def choose_profile_interactive(settings, save_settings, logger, non_interactive=False):
     device_cfg = settings.setdefault("device", {})
     current_profile = device_cfg.get("profile", "usb_or_existing")
     profile_options = [
@@ -1036,6 +1036,8 @@ def choose_profile_interactive(settings, save_settings, logger):
     current_label = label_map.get(current_profile, current_profile)
 
     logger.info(f"Current profile: {current_label}")
+    if non_interactive:
+        return current_profile
     choice_mode = input("Press Enter to continue, or type 'c' to change profile: ").strip().lower()
     if choice_mode != "c":
         return current_profile
@@ -1068,9 +1070,10 @@ def choose_profile_interactive(settings, save_settings, logger):
     return device_cfg.get("profile", selected_profile)
 
 
-def bootstrap_device(settings, save_settings, logger):
+def bootstrap_device(settings, save_settings, logger, non_interactive=False):
     device_cfg = settings.get("device", {})
-    profile = choose_profile_interactive(settings, save_settings, logger)
+    profile = choose_profile_interactive(settings, save_settings, logger,
+                                         non_interactive=non_interactive)
     device_cfg = settings.get("device", {})
     endpoint = device_cfg.get("endpoint", "")
     preferred_serial = device_cfg.get("serial")
@@ -1118,6 +1121,9 @@ def bootstrap_device(settings, save_settings, logger):
 
     if not device.select_device(preferred_serial=preferred_serial, auto_select_single=auto_select_single):
         logger.error("Could not resolve target device from settings.")
+        if non_interactive:
+            logger.error("Non-interactive mode: skipping wizard. Check device.serial in settings.json.")
+            return None
         should_run_wizard = input("Run device setup wizard now? [Y/n]: ").strip().lower()
         if should_run_wizard not in ("", "y", "yes"):
             logger.error("Setup aborted. Please set device.serial in settings.json.")
