@@ -1,8 +1,10 @@
 from .base_screen import BaseScreen
 from core.vision import vision
 import logging
+import os
 import time
 import cv2
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -18,12 +20,15 @@ BATTLE_ANCHORS = (
 
 RETURN_HOME_TEMPLATES = (
     "buttons/battle/btn_return_home",
+)
+
+# For bail/recovery paths: tap whichever exit button is reachable.
+EXIT_BATTLE_TEMPLATES = (
+    "buttons/battle/btn_return_home",
     "buttons/battle/btn_end_battle",
 )
 
-# Small scales for troop bar icons, which are much smaller than vision templates
-# captured from the village map.
-SLOT_ICON_SCALES = (0.15, 0.20, 0.25, 0.30, 0.35, 0.40, 0.50)
+SLOT_ICON_SCALES = (0.50, 0.60, 0.70, 0.80, 0.90, 1.00, 1.10, 1.20)
 
 
 class BattleScreen(BaseScreen):
@@ -67,7 +72,7 @@ class BattleScreen(BaseScreen):
     def bail(self):
         """Best-effort recovery: tap Return Home if visible, then close popups."""
         loc = self._wait_until_any_appears(
-            RETURN_HOME_TEMPLATES,
+            EXIT_BATTLE_TEMPLATES,
             timeout=5,
             silent=True,
             use_orb_fallback=False,
@@ -102,62 +107,88 @@ class BattleScreen(BaseScreen):
             logger.warning("[DEPLOY] troop_bar_region invalid — skipping slot deploy.")
             return False
 
-        bar_gray = cv2.cvtColor(screen[by1:by2, bx1:bx2], cv2.COLOR_BGR2GRAY)
+        bar_crop = screen[by1:by2, bx1:bx2]
+        bar_gray = cv2.cvtColor(bar_crop, cv2.COLOR_BGR2GRAY)
         tap_interval = float(deploy_cfg.get("tap_interval", DEPLOY_TAP_INTERVAL))
 
+        bar_center_y = (by1 + by2) // 2
         any_deployed = False
+        debug_clicks = []
         for slot in slots:
             template_key = slot.get("template", "")
             configured_taps = int(slot.get("taps", 5))
+            fixed_bar_x = slot.get("bar_x", 0)
 
-            template = vision.cache.get(template_key)
-            if template is None:
-                logger.debug(f"[DEPLOY] '{template_key}' not in cache, skipping")
-                continue
+            if fixed_bar_x:
+                # User-pinned bar position — skip template matching entirely.
+                slot_cx = int(fixed_bar_x)
+                slot_cy = int(slot.get("bar_y", bar_center_y))
+                logger.info(f"[DEPLOY] '{template_key}' at ({slot_cx},{slot_cy}) [fixed], deploying {configured_taps}×")
+            else:
+                template = vision.cache.get(template_key)
+                if template is None:
+                    logger.debug(f"[DEPLOY] '{template_key}' not in cache, skipping")
+                    continue
 
-            score, scaled, result_map = vision._find_best_scale(
-                bar_gray, template, threshold=0.50, scales=SLOT_ICON_SCALES,
-            )
-            if result_map is None or scaled is None:
-                logger.debug(f"[DEPLOY] '{template_key}' not found in bar (score={score:.3f})")
-                continue
+                score, scaled, result_map = vision._find_best_scale(
+                    bar_gray, template, threshold=0.50, scales=SLOT_ICON_SCALES,
+                )
+                if result_map is None or scaled is None:
+                    logger.debug(f"[DEPLOY] '{template_key}' not found in bar (score={score:.3f})")
+                    continue
 
-            _, _, _, max_loc = cv2.minMaxLoc(result_map)
-            th, tw = scaled.shape[:2]
-            slot_cx = int(max_loc[0] + tw // 2 + bx1)
-            slot_cy = int(max_loc[1] + th // 2 + by1)
+                _, _, _, max_loc = cv2.minMaxLoc(result_map)
+                th, tw = scaled.shape[:2]
+                slot_cx = int(max_loc[0] + tw // 2 + bx1)
+                slot_cy = int(max_loc[1] + th // 2 + by1)
+                logger.info(f"[DEPLOY] '{template_key}' at ({slot_cx},{slot_cy}) score={score:.2f}, deploying {configured_taps}×")
 
-            count = self._read_slot_count(screen, slot_cx, slot_cy, th, by2)
-            taps = min(configured_taps, count) if count is not None else configured_taps
-
-            logger.info(
-                f"[DEPLOY] '{template_key}' at ({slot_cx},{slot_cy}), "
-                f"count={'?' if count is None else count}, deploying {taps}×"
-            )
+            debug_clicks.append((template_key, slot_cx, slot_cy))
             self.ui_manager.click(slot_cx, slot_cy)
             self.ui_manager._poll_sleep(0.3)
 
-            self._execute_slot_strategy(slot, deploy_cfg, taps, tap_interval)
+            self._execute_slot_strategy(slot, deploy_cfg, configured_taps, tap_interval)
             any_deployed = True
 
+        self._save_bar_debug(screen, by1, by2, bx1, bx2, debug_clicks)
         return any_deployed
 
-    def _read_slot_count(self, screen, slot_cx, slot_cy, icon_h, bar_bottom):
-        from core.ocr import read_number_with_confidence
-        icon_bottom = slot_cy + icon_h // 2
-        # Count label sits in a narrow band just below the icon.
-        region = (
-            max(0, slot_cx - 22),
-            max(0, icon_bottom + 2),
-            min(screen.shape[1], slot_cx + 22),
-            min(screen.shape[0], bar_bottom),
-        )
-        if region[2] <= region[0] or region[3] <= region[1]:
-            return None
-        val, conf = read_number_with_confidence(screen, region, min_value=1, max_value=300)
-        if val is not None:
-            logger.debug(f"[DEPLOY] count OCR → {val} (conf={conf:.2f})")
-        return val
+    def _save_bar_debug(self, screen, by1, by2, bx1, bx2, click_positions=None):
+        if not logger.isEnabledFor(logging.DEBUG):
+            return
+        try:
+            out_dir = os.path.join("coc_bot", "logs", "debug")
+            os.makedirs(out_dir, exist_ok=True)
+            ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+            canvas = screen.copy()
+            cv2.rectangle(canvas, (bx1, by1), (bx2, by2), (0, 255, 0), 2)
+
+            colors = [(0, 80, 255), (255, 80, 0), (0, 220, 220), (220, 0, 220)]
+            for i, (key, cx, cy) in enumerate(click_positions or []):
+                color = colors[i % len(colors)]
+                label = key.split("/")[-1]
+                cv2.circle(canvas, (cx, cy), 18, color, 3)
+                cv2.putText(canvas, label, (cx + 22, cy + 6),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2, cv2.LINE_AA)
+
+            cv2.imwrite(os.path.join(out_dir, f"bar_deploy_{ts}.png"), canvas)
+
+            # 3× zoomed bar crop with click circles mapped into crop coordinates.
+            zoom = 3
+            zoomed = cv2.resize(screen[by1:by2, bx1:bx2], None, fx=zoom, fy=zoom,
+                                interpolation=cv2.INTER_NEAREST)
+            for i, (key, cx, cy) in enumerate(click_positions or []):
+                color = colors[i % len(colors)]
+                label = key.split("/")[-1]
+                lx = (cx - bx1) * zoom
+                ly = (cy - by1) * zoom
+                cv2.circle(zoomed, (lx, ly), 18, color, 3)
+                cv2.putText(zoomed, label, (lx + 22, ly + 6),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2, cv2.LINE_AA)
+            cv2.imwrite(os.path.join(out_dir, f"bar_deploy_{ts}_zoom.png"), zoomed)
+            logger.debug(f"[DEPLOY] Bar debug saved: {out_dir}/bar_deploy_{ts}*.png")
+        except Exception as e:
+            logger.debug(f"[DEPLOY] Bar debug save failed: {e}")
 
     def _tap_line(self, x_start, x_end, y, taps, interval):
         step = (x_end - x_start) / max(taps - 1, 1)
@@ -169,9 +200,12 @@ class BattleScreen(BaseScreen):
         strategy = slot_cfg.get("strategy", "line")
 
         if strategy == "points":
-            for pt in slot_cfg.get("points", [])[:taps]:
-                self.ui_manager.click(int(pt[0]), int(pt[1]))
-                self.ui_manager._poll_sleep(tap_interval)
+            pts = slot_cfg.get("points", [])
+            if pts:
+                for i in range(taps):
+                    pt = pts[i % len(pts)]
+                    self.ui_manager.click(int(pt[0]), int(pt[1]))
+                    self.ui_manager._poll_sleep(tap_interval)
         else:
             y       = int(slot_cfg.get("y",       deploy_cfg.get("battlefield_y",       750)))
             x_start = int(slot_cfg.get("x_start", deploy_cfg.get("battlefield_x_start", 300)))

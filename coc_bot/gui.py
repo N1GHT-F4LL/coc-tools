@@ -457,6 +457,12 @@ class MainWindow(QMainWindow):
         self._d_strategy.addItems(["line", "points"])
         form.addRow("Strategy", self._d_strategy)
 
+        # Optional fixed bar position — bypasses template matching when non-zero.
+        self._d_bar_x = QSpinBox(); self._d_bar_x.setRange(0, 3000)
+        self._d_bar_y = QSpinBox(); self._d_bar_y.setRange(0, 3000)
+        form.addRow("Bar X  (0 = auto)", self._d_bar_x)
+        form.addRow("Bar Y  (0 = auto)", self._d_bar_y)
+
         rv.addLayout(form)
 
         # Line group
@@ -563,6 +569,8 @@ class MainWindow(QMainWindow):
         self._d_taps.setValue(slot.get("taps", 5))
         strategy = slot.get("strategy", "line")
         self._d_strategy.setCurrentText(strategy)
+        self._d_bar_x.setValue(slot.get("bar_x", 0))
+        self._d_bar_y.setValue(slot.get("bar_y", 0))
         self._d_y.setValue(slot.get("y", 760))
         self._d_xs.setValue(slot.get("x_start", 300))
         self._d_xe.setValue(slot.get("x_end", 1300))
@@ -581,6 +589,16 @@ class MainWindow(QMainWindow):
         slot["template"] = self._d_tmpl_cb.currentData() or ""
         slot["taps"]     = self._d_taps.value()
         slot["strategy"] = self._d_strategy.currentText()
+        bx = self._d_bar_x.value()
+        by = self._d_bar_y.value()
+        if bx:
+            slot["bar_x"] = bx
+        else:
+            slot.pop("bar_x", None)
+        if by:
+            slot["bar_y"] = by
+        else:
+            slot.pop("bar_y", None)
         if slot["strategy"] == "line":
             slot["y"]       = self._d_y.value()
             slot["x_start"] = self._d_xs.value()

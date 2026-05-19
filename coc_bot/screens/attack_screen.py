@@ -1,5 +1,5 @@
 from .base_screen import BaseScreen
-from .battle_screen import BattleScreen, RETURN_HOME_TEMPLATES
+from .battle_screen import BattleScreen, EXIT_BATTLE_TEMPLATES
 from core.ocr import read_number_with_confidence
 from core.vision import vision
 import logging
@@ -466,7 +466,7 @@ class AttackScreen(BaseScreen):
         return 0.0
 
     def _dump_loot_debug(self, screen, debug_regions, attack_cfg):
-        if not attack_cfg.get("debug_loot_regions", False):
+        if not logger.isEnabledFor(logging.DEBUG):
             return
         if not debug_regions:
             return
@@ -570,7 +570,7 @@ class AttackScreen(BaseScreen):
 
     def _bail(self):
         """Best-effort recovery: tap Return Home if visible, then close popups."""
-        loc = self._wait_until_any_appears(RETURN_HOME_TEMPLATES, timeout=5, silent=True, use_orb_fallback=False)
+        loc = self._wait_until_any_appears(EXIT_BATTLE_TEMPLATES, timeout=5, silent=True, use_orb_fallback=False)
         if loc:
             self.ui_manager.click(*loc)
             logger.info("Return Home tapped (bail recovery).")

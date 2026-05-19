@@ -12,8 +12,8 @@
     "target_density": 240
   },
   "farm": {
-    "min_gold": 500000,
-    "min_elixir": 500000,
+    "min_gold": 100000,
+    "min_elixir": 100000,
     "min_dark_elixir": 500
   },
   "delays": {
@@ -26,7 +26,6 @@
     "radius": 5
   },
   "attack": {
-    "debug_loot_regions": true,
     "loot_by_icon": {
       "_note": "Auto-locate resource icons then OCR numbers by relative offsets.",
       "threshold": 0.62,
@@ -71,9 +70,9 @@
       "_note": "mode=slot detects bar icons and taps each; mode=sweep does a bottom-edge tap sweep. Sweep params kept as fallback.",
       "mode": "slot",
       "troop_bar_region": [
-        200,
-        855,
-        1400,
+        0,
+        730,
+        1600,
         910
       ],
       "battlefield_y": 750,
@@ -93,6 +92,127 @@
             [
               257,
               306
+            ]
+          ]
+        },
+        {
+          "template": "units/troops/healer",
+          "taps": 6,
+          "strategy": "points",
+          "points": [
+            [
+              140,
+              423
+            ]
+          ]
+        },
+        {
+          "template": "units/troops/archer",
+          "taps": 12,
+          "strategy": "points",
+          "points": [
+            [
+              164,
+              425
+            ]
+          ]
+        },
+        {
+          "template": "units/siege/log_launcher",
+          "taps": 1,
+          "strategy": "points",
+          "points": [
+            [
+              138,
+              435
+            ]
+          ]
+        },
+        {
+          "template": "units/heroes/warden",
+          "taps": 1,
+          "strategy": "points",
+          "points": [
+            [
+              152,
+              413
+            ]
+          ]
+        },
+        {
+          "template": "units/heroes/bk",
+          "taps": 1,
+          "strategy": "points",
+          "points": [
+            [
+              134,
+              441
+            ]
+          ]
+        },
+        {
+          "template": "units/heroes/queen",
+          "taps": 1,
+          "strategy": "points",
+          "points": [
+            [
+              140,
+              427
+            ]
+          ]
+        },
+        {
+          "template": "units/heroes/rc",
+          "taps": 1,
+          "strategy": "points",
+          "points": [
+            [
+              168,
+              397
+            ]
+          ]
+        },
+        {
+          "template": "units/heroes/bk",
+          "taps": 1,
+          "strategy": "points",
+          "points": [
+            [
+              148,
+              407
+            ]
+          ]
+        },
+        {
+          "template": "units/heroes/queen",
+          "taps": 1,
+          "strategy": "points",
+          "points": [
+            [
+              148,
+              407
+            ]
+          ]
+        },
+        {
+          "template": "units/heroes/warden",
+          "taps": 1,
+          "strategy": "points",
+          "points": [
+            [
+              148,
+              407
+            ]
+          ]
+        },
+        {
+          "template": "units/heroes/rc",
+          "taps": 1,
+          "strategy": "points",
+          "points": [
+            [
+              148,
+              407
             ]
           ]
         }
