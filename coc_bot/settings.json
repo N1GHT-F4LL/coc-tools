@@ -56,8 +56,22 @@
       "battlefield_x_end": 1300,
       "tap_interval": 0.15,
       "slots": [
-        {"template": "units/troops/barbarian", "taps": 10},
-        {"template": "units/troops/archer", "taps": 10}
+        {
+          "template": "units/troops/barbarian",
+          "taps": 10,
+          "strategy": "line",
+          "y": 760,
+          "x_start": 300,
+          "x_end": 1300
+        },
+        {
+          "template": "units/troops/archer",
+          "taps": 15,
+          "strategy": "line",
+          "y": 760,
+          "x_start": 300,
+          "x_end": 1300
+        }
       ],
       "y": 820,
       "x_start": 300,

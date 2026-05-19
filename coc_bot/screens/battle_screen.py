@@ -83,10 +83,6 @@ class BattleScreen(BaseScreen):
     # ------------------------------------------------------------------
 
     def _slot_deploy(self, deploy_cfg):
-        """Find each configured troop icon in the bar, select it, deploy N times.
-
-        Returns True if at least one slot was successfully deployed.
-        """
         slots = deploy_cfg.get("slots", [])
         if not slots:
             return False
@@ -107,29 +103,23 @@ class BattleScreen(BaseScreen):
             return False
 
         bar_gray = cv2.cvtColor(screen[by1:by2, bx1:bx2], cv2.COLOR_BGR2GRAY)
-
-        bf_y = int(deploy_cfg.get("battlefield_y", 750))
-        bf_x_start = int(deploy_cfg.get("battlefield_x_start", 300))
-        bf_x_end = int(deploy_cfg.get("battlefield_x_end", 1300))
         tap_interval = float(deploy_cfg.get("tap_interval", DEPLOY_TAP_INTERVAL))
 
         any_deployed = False
         for slot in slots:
             template_key = slot.get("template", "")
-            taps = int(slot.get("taps", 5))
+            configured_taps = int(slot.get("taps", 5))
+
             template = vision.cache.get(template_key)
             if template is None:
-                logger.debug(f"[DEPLOY] '{template_key}' not in cache, skipping slot")
+                logger.debug(f"[DEPLOY] '{template_key}' not in cache, skipping")
                 continue
 
             score, scaled, result_map = vision._find_best_scale(
-                bar_gray,
-                template,
-                threshold=0.50,
-                scales=SLOT_ICON_SCALES,
+                bar_gray, template, threshold=0.50, scales=SLOT_ICON_SCALES,
             )
             if result_map is None or scaled is None:
-                logger.debug(f"[DEPLOY] '{template_key}' not found in troop bar (score={score:.3f})")
+                logger.debug(f"[DEPLOY] '{template_key}' not found in bar (score={score:.3f})")
                 continue
 
             _, _, _, max_loc = cv2.minMaxLoc(result_map)
@@ -137,19 +127,54 @@ class BattleScreen(BaseScreen):
             slot_cx = int(max_loc[0] + tw // 2 + bx1)
             slot_cy = int(max_loc[1] + th // 2 + by1)
 
-            logger.info(f"[DEPLOY] Found '{template_key}' at ({slot_cx},{slot_cy}), deploying {taps}×")
+            count = self._read_slot_count(screen, slot_cx, slot_cy, th, by2)
+            taps = min(configured_taps, count) if count is not None else configured_taps
+
+            logger.info(
+                f"[DEPLOY] '{template_key}' at ({slot_cx},{slot_cy}), "
+                f"count={'?' if count is None else count}, deploying {taps}×"
+            )
             self.ui_manager.click(slot_cx, slot_cy)
             time.sleep(0.3)
 
-            step = (bf_x_end - bf_x_start) / max(taps - 1, 1)
-            for i in range(taps):
-                x = int(bf_x_start + i * step)
-                self.ui_manager.click(x, bf_y)
-                time.sleep(tap_interval)
-
+            self._execute_slot_strategy(slot, deploy_cfg, taps, tap_interval)
             any_deployed = True
 
         return any_deployed
+
+    def _read_slot_count(self, screen, slot_cx, slot_cy, icon_h, bar_bottom):
+        from core.ocr import read_number_with_confidence
+        icon_bottom = slot_cy + icon_h // 2
+        # Count label sits in a narrow band just below the icon.
+        region = (
+            max(0, slot_cx - 22),
+            max(0, icon_bottom + 2),
+            min(screen.shape[1], slot_cx + 22),
+            min(screen.shape[0], bar_bottom),
+        )
+        if region[2] <= region[0] or region[3] <= region[1]:
+            return None
+        val, conf = read_number_with_confidence(screen, region, min_value=1, max_value=300)
+        if val is not None:
+            logger.debug(f"[DEPLOY] count OCR → {val} (conf={conf:.2f})")
+        return val
+
+    def _execute_slot_strategy(self, slot_cfg, deploy_cfg, taps, tap_interval):
+        strategy = slot_cfg.get("strategy", "line")
+
+        if strategy == "points":
+            points = slot_cfg.get("points", [])
+            for pt in points[:taps]:
+                self.ui_manager.click(int(pt[0]), int(pt[1]))
+                time.sleep(tap_interval)
+        else:
+            y       = int(slot_cfg.get("y",       deploy_cfg.get("battlefield_y",       750)))
+            x_start = int(slot_cfg.get("x_start", deploy_cfg.get("battlefield_x_start", 300)))
+            x_end   = int(slot_cfg.get("x_end",   deploy_cfg.get("battlefield_x_end",  1300)))
+            step = (x_end - x_start) / max(taps - 1, 1)
+            for i in range(taps):
+                self.ui_manager.click(int(x_start + i * step), y)
+                time.sleep(tap_interval)
 
     def _sweep_deploy(self, deploy_cfg):
         y = int(deploy_cfg.get("y", 820))
