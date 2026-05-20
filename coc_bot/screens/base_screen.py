@@ -12,7 +12,6 @@ class BaseScreen:
         raise NotImplementedError
 
     def close_popups(self):
-        """Quickly attempt to close any visible popups (close/okay buttons) with minimal wait."""
         logger.debug("Quick scan for popups...")
         closed_any = False
 
@@ -52,7 +51,6 @@ class BaseScreen:
             )
             return loc if (loc and (validator is None or validator(loc))) else None
 
-        # Multiple templates: check all per frame within a shared deadline.
         # The old sequential approach gave each template the full timeout, multiplying
         # the worst-case wait by the number of templates (e.g. 360 s instead of 180 s).
         deadline = time.time() + timeout

@@ -457,7 +457,6 @@ class MainWindow(QMainWindow):
         self._d_strategy.addItems(["line", "points"])
         form.addRow("Strategy", self._d_strategy)
 
-        # Optional fixed bar position — bypasses template matching when non-zero.
         self._d_bar_x = QSpinBox(); self._d_bar_x.setRange(0, 3000)
         self._d_bar_y = QSpinBox(); self._d_bar_y.setRange(0, 3000)
         form.addRow("Bar X  (0 = auto)", self._d_bar_x)

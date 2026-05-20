@@ -8,6 +8,16 @@ from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
+
+def _draw_clicks(img, click_positions, colors, ox, oy, scale):
+    for i, (key, cx, cy) in enumerate(click_positions or []):
+        color = colors[i % len(colors)]
+        label = key.split("/")[-1]
+        px, py = int((cx - ox) * scale), int((cy - oy) * scale)
+        cv2.circle(img, (px, py), 18, color, 3)
+        cv2.putText(img, label, (px + 22, py + 6),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2, cv2.LINE_AA)
+
 BATTLE_TIMEOUT = 180
 DEPLOY_TAP_INTERVAL = 0.15
 
@@ -108,7 +118,7 @@ class BattleScreen(BaseScreen):
             return False
 
         bar_crop = screen[by1:by2, bx1:bx2]
-        bar_gray = cv2.cvtColor(bar_crop, cv2.COLOR_BGR2GRAY)
+        bar_gray = None
         tap_interval = float(deploy_cfg.get("tap_interval", DEPLOY_TAP_INTERVAL))
 
         bar_center_y = (by1 + by2) // 2
@@ -120,11 +130,12 @@ class BattleScreen(BaseScreen):
             fixed_bar_x = slot.get("bar_x", 0)
 
             if fixed_bar_x:
-                # User-pinned bar position — skip template matching entirely.
                 slot_cx = int(fixed_bar_x)
                 slot_cy = int(slot.get("bar_y", bar_center_y))
                 logger.info(f"[DEPLOY] '{template_key}' at ({slot_cx},{slot_cy}) [fixed], deploying {configured_taps}×")
             else:
+                if bar_gray is None:
+                    bar_gray = cv2.cvtColor(bar_crop, cv2.COLOR_BGR2GRAY)
                 template = vision.cache.get(template_key)
                 if template is None:
                     logger.debug(f"[DEPLOY] '{template_key}' not in cache, skipping")
@@ -150,41 +161,26 @@ class BattleScreen(BaseScreen):
             self._execute_slot_strategy(slot, deploy_cfg, configured_taps, tap_interval)
             any_deployed = True
 
-        self._save_bar_debug(screen, by1, by2, bx1, bx2, debug_clicks)
+        self._save_bar_debug(screen, bar_crop, by1, by2, bx1, bx2, debug_clicks)
         return any_deployed
 
-    def _save_bar_debug(self, screen, by1, by2, bx1, bx2, click_positions=None):
+    def _save_bar_debug(self, screen, bar_crop, by1, by2, bx1, bx2, click_positions=None):
         if not logger.isEnabledFor(logging.DEBUG):
             return
         try:
             out_dir = os.path.join("coc_bot", "logs", "debug")
             os.makedirs(out_dir, exist_ok=True)
             ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+            colors = [(0, 80, 255), (255, 80, 0), (0, 220, 220), (220, 0, 220)]
+
             canvas = screen.copy()
             cv2.rectangle(canvas, (bx1, by1), (bx2, by2), (0, 255, 0), 2)
-
-            colors = [(0, 80, 255), (255, 80, 0), (0, 220, 220), (220, 0, 220)]
-            for i, (key, cx, cy) in enumerate(click_positions or []):
-                color = colors[i % len(colors)]
-                label = key.split("/")[-1]
-                cv2.circle(canvas, (cx, cy), 18, color, 3)
-                cv2.putText(canvas, label, (cx + 22, cy + 6),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2, cv2.LINE_AA)
-
+            _draw_clicks(canvas, click_positions, colors, 0, 0, 1)
             cv2.imwrite(os.path.join(out_dir, f"bar_deploy_{ts}.png"), canvas)
 
-            # 3× zoomed bar crop with click circles mapped into crop coordinates.
             zoom = 3
-            zoomed = cv2.resize(screen[by1:by2, bx1:bx2], None, fx=zoom, fy=zoom,
-                                interpolation=cv2.INTER_NEAREST)
-            for i, (key, cx, cy) in enumerate(click_positions or []):
-                color = colors[i % len(colors)]
-                label = key.split("/")[-1]
-                lx = (cx - bx1) * zoom
-                ly = (cy - by1) * zoom
-                cv2.circle(zoomed, (lx, ly), 18, color, 3)
-                cv2.putText(zoomed, label, (lx + 22, ly + 6),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2, cv2.LINE_AA)
+            zoomed = cv2.resize(bar_crop, None, fx=zoom, fy=zoom, interpolation=cv2.INTER_NEAREST)
+            _draw_clicks(zoomed, click_positions, colors, bx1, by1, zoom)
             cv2.imwrite(os.path.join(out_dir, f"bar_deploy_{ts}_zoom.png"), zoomed)
             logger.debug(f"[DEPLOY] Bar debug saved: {out_dir}/bar_deploy_{ts}*.png")
         except Exception as e:
@@ -201,7 +197,9 @@ class BattleScreen(BaseScreen):
 
         if strategy == "points":
             pts = slot_cfg.get("points", [])
-            if pts:
+            if not pts:
+                logger.warning(f"[DEPLOY] strategy='points' but no points configured for '{slot_cfg.get('template', '?')}'")
+            else:
                 for i in range(taps):
                     pt = pts[i % len(pts)]
                     self.ui_manager.click(int(pt[0]), int(pt[1]))
