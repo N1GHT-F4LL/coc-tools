@@ -677,8 +677,7 @@ class MainWindow(QMainWindow):
         cf.addRow("", self._dev_strict)
         cf.addRow("", self._dev_auto_sel)
 
-        btn_test = QPushButton("Test ADB Connection")
-        btn_test.setFixedWidth(190)
+        btn_test = QPushButton("Test Connection")
         self._dev_adb_result = QLabel("—")
         self._dev_adb_result.setWordWrap(True)
         self._dev_adb_result.setStyleSheet("color:#6c7086; font-size:9pt;")
@@ -733,9 +732,8 @@ class MainWindow(QMainWindow):
         v.addWidget(grp_timing)
 
         # ── Save ─────────────────────────────────────────────────────────────
-        btn_save = QPushButton("Save Device Settings")
+        btn_save = QPushButton("Save")
         btn_save.setObjectName("btn_primary")
-        btn_save.setFixedWidth(190)
         v.addWidget(btn_save)
         v.addStretch()
 
@@ -892,11 +890,6 @@ class MainWindow(QMainWindow):
         df.setSpacing(10)
         df.setLabelAlignment(Qt.AlignRight)
 
-        self._atk_mode = QComboBox()
-        self._atk_mode.addItems(["slot", "sweep"])
-        self._atk_mode.setCurrentText(deploy.get("mode", "slot"))
-        df.addRow("Attack Mode", self._atk_mode)
-
         bar = deploy.get("troop_bar_region", [0, 730, 1600, 910])
         self._atk_bar_x1 = QSpinBox(); self._atk_bar_x1.setRange(0, 3000); self._atk_bar_x1.setValue(int(bar[0]))
         self._atk_bar_y1 = QSpinBox(); self._atk_bar_y1.setRange(0, 3000); self._atk_bar_y1.setValue(int(bar[1]))
@@ -918,9 +911,8 @@ class MainWindow(QMainWindow):
         df.addRow("Tap interval (s)", self._atk_tap_interval)
         v.addWidget(grp_dep)
 
-        btn_save = QPushButton("Save Attack Settings")
+        btn_save = QPushButton("Save")
         btn_save.setObjectName("btn_primary")
-        btn_save.setFixedWidth(180)
         btn_save.clicked.connect(self._save_attack)
         v.addWidget(btn_save)
         v.addStretch()
@@ -942,7 +934,7 @@ class MainWindow(QMainWindow):
         s["farm"]["min_elixir"]      = self._spin_elixir.value()
         s["farm"]["min_dark_elixir"] = self._spin_dark.value()
         deploy = s.setdefault("attack", {}).setdefault("deploy", {})
-        deploy["mode"]             = self._atk_mode.currentText()
+        deploy["mode"]             = "slot"
         deploy["troop_bar_region"] = [
             self._atk_bar_x1.value(), self._atk_bar_y1.value(),
             self._atk_bar_x2.value(), self._atk_bar_y2.value(),
@@ -994,7 +986,7 @@ class MainWindow(QMainWindow):
             b.setFixedWidth(40)
             btn_row.addWidget(b)
         lv.addLayout(btn_row)
-        btn_save_d = QPushButton("Save Scenario")
+        btn_save_d = QPushButton("Save")
         lv.addWidget(btn_save_d)
 
         # --- Slot editor form ---
@@ -1454,7 +1446,7 @@ class MainWindow(QMainWindow):
         rv.addLayout(form)
 
         btn_add_pts  = QPushButton("Save as Points")
-        btn_add_line = QPushButton("Save as Line  (use 1st & last point)")
+        btn_add_line = QPushButton("Save as Line")
         rv.addWidget(btn_add_pts)
         rv.addWidget(btn_add_line)
         rv.addStretch()
