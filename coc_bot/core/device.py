@@ -877,8 +877,11 @@ def connect_with_profile(device, profile, endpoint=None):
         device.connect_device(ep)
 
 
-def launch_emulator_for_profile(profile, logger):
-    paths = PROFILE_EXECUTABLES.get(profile, [])
+def launch_emulator_for_profile(profile, logger, override_path=None):
+    if override_path and os.path.exists(override_path):
+        paths = [override_path]
+    else:
+        paths = PROFILE_EXECUTABLES.get(profile, [])
     for exe in paths:
         if os.path.exists(exe):
             try:
@@ -909,14 +912,14 @@ def is_emulator_running(profile):
     return False
 
 
-def ensure_emulator_running(profile, logger):
+def ensure_emulator_running(profile, logger, override_path=None):
     if profile not in PROFILE_PROCESS_NAMES:
         return True
     if is_emulator_running(profile):
         logger.debug(f"Emulator process for profile '{profile}' is already running.")
         return True
     logger.info(f"Emulator for profile '{profile}' is not running.")
-    launched = launch_emulator_for_profile(profile, logger)
+    launched = launch_emulator_for_profile(profile, logger, override_path=override_path)
     if launched:
         logger.debug(f"Waiting 12 seconds for {profile} startup...")
         time.sleep(12)
@@ -1095,8 +1098,9 @@ def bootstrap_device(settings, save_settings, logger, non_interactive=False):
         logger.error("On Windows, you can download from: https://developer.android.com/studio/releases/platform-tools")
         return None
 
+    emulator_path = device_cfg.get("emulator_path", "")
     if profile in ("ldplayer", "bluestacks", "nox", "mumu", "android_emulator"):
-        ensure_emulator_running(profile, logger)
+        ensure_emulator_running(profile, logger, override_path=emulator_path or None)
 
     connect_with_profile(device, profile, endpoint)
     time.sleep(0.5)

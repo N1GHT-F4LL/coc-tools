@@ -1,0 +1,157 @@
+{
+  "name": "Thrower",
+  "slots": [
+    {
+      "template": "units/heroes/barbarian_king",
+      "taps": 1,
+      "strategy": "points",
+      "points": [
+        [
+          142,
+          428
+        ]
+      ]
+    },
+    {
+      "strategy": "delay",
+      "seconds": 3
+    },
+    {
+      "template": "units/siege/log_launcher",
+      "taps": 1,
+      "strategy": "points",
+      "points": [
+        [
+          184,
+          425
+        ]
+      ]
+    },
+    {
+      "strategy": "delay",
+      "seconds": 3
+    },
+    {
+      "template": "units/troops/thrower",
+      "taps": 16,
+      "strategy": "line",
+      "x1": 194,
+      "y1": 411,
+      "x2": 278,
+      "y2": 359
+    },
+    {
+      "template": "units/troops/healer",
+      "taps": 6,
+      "strategy": "line",
+      "x1": 194,
+      "y1": 411,
+      "x2": 278,
+      "y2": 359
+    },
+    {
+      "template": "units/troops/archer",
+      "taps": 12,
+      "strategy": "points",
+      "points": [
+        [
+          164,
+          425
+        ]
+      ]
+    },
+    {
+      "template": "units/heroes/archer_queen",
+      "taps": 1,
+      "strategy": "points",
+      "points": [
+        [
+          148,
+          407
+        ]
+      ]
+    },
+    {
+      "template": "units/heroes/grand_warden",
+      "taps": 1,
+      "strategy": "points",
+      "points": [
+        [
+          148,
+          407
+        ]
+      ]
+    },
+    {
+      "template": "units/heroes/royal_champion",
+      "taps": 1,
+      "strategy": "points",
+      "points": [
+        [
+          148,
+          407
+        ]
+      ]
+    },
+    {
+      "strategy": "delay",
+      "seconds": 10
+    },
+    {
+      "template": "units/heroes/barbarian_king",
+      "taps": 1,
+      "strategy": "points",
+      "points": [
+        [
+          184,
+          425
+        ]
+      ]
+    },
+    {
+      "strategy": "delay",
+      "seconds": 5
+    },
+    {
+      "template": "units/heroes/archer_queen",
+      "taps": 1,
+      "strategy": "points",
+      "points": [
+        [
+          184,
+          425
+        ]
+      ]
+    },
+    {
+      "strategy": "delay",
+      "seconds": 3
+    },
+    {
+      "template": "units/heroes/royal_champion",
+      "taps": 1,
+      "strategy": "points",
+      "points": [
+        [
+          184,
+          425
+        ]
+      ]
+    },
+    {
+      "strategy": "delay",
+      "seconds": 3
+    },
+    {
+      "template": "units/heroes/grand_warden",
+      "taps": 1,
+      "strategy": "points",
+      "points": [
+        [
+          184,
+          425
+        ]
+      ]
+    }
+  ]
+}

@@ -171,7 +171,15 @@ class AttackScreen(BaseScreen):
             self._bail()
             return
 
-        battle.deploy_troops(attack_cfg.get("deploy", {}))
+        deploy_cfg = dict(attack_cfg.get("deploy", {}))
+        active = deploy_cfg.get("active_scenario")
+        if active:
+            try:
+                from core.scenario import load_scenario
+                deploy_cfg["slots"] = load_scenario(active).get("slots", [])
+            except FileNotFoundError:
+                logger.warning(f"[SCENARIO] '{active}.json' not found — using settings slots")
+        battle.deploy_troops(deploy_cfg)
 
         loc = battle.wait_for_end()
         if not loc:

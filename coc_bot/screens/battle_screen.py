@@ -125,6 +125,13 @@ class BattleScreen(BaseScreen):
         any_deployed = False
         debug_clicks = []
         for slot in slots:
+            if slot.get("strategy") == "delay":
+                seconds = int(slot.get("seconds", 1))
+                logger.info(f"[DEPLOY] Waiting {seconds}s")
+                self.ui_manager._poll_sleep(seconds)
+                any_deployed = True
+                continue
+
             template_key = slot.get("template", "")
             configured_taps = int(slot.get("taps", 5))
             fixed_bar_x = slot.get("bar_x", 0)
@@ -186,11 +193,17 @@ class BattleScreen(BaseScreen):
         except Exception as e:
             logger.debug(f"[DEPLOY] Bar debug save failed: {e}")
 
-    def _tap_line(self, x_start, x_end, y, taps, interval):
-        step = (x_end - x_start) / max(taps - 1, 1)
-        for i in range(taps):
-            self.ui_manager.click(int(x_start + i * step), y)
+    def _tap_line(self, x1, y1, x2, y2, taps, interval):
+        """Tap `taps` evenly-spaced points along the line from (x1,y1) to (x2,y2).
+        taps=1 → single tap at the midpoint; taps>1 → endpoints included."""
+        if taps == 1:
+            self.ui_manager.click((x1 + x2) // 2, (y1 + y2) // 2)
             self.ui_manager._poll_sleep(interval)
+        else:
+            for i in range(taps):
+                t = i / (taps - 1)
+                self.ui_manager.click(int(x1 + (x2 - x1) * t), int(y1 + (y2 - y1) * t))
+                self.ui_manager._poll_sleep(interval)
 
     def _execute_slot_strategy(self, slot_cfg, deploy_cfg, taps, tap_interval):
         strategy = slot_cfg.get("strategy", "line")
@@ -205,10 +218,13 @@ class BattleScreen(BaseScreen):
                     self.ui_manager.click(int(pt[0]), int(pt[1]))
                     self.ui_manager._poll_sleep(tap_interval)
         else:
-            y       = int(slot_cfg.get("y",       deploy_cfg.get("battlefield_y",       750)))
-            x_start = int(slot_cfg.get("x_start", deploy_cfg.get("battlefield_x_start", 300)))
-            x_end   = int(slot_cfg.get("x_end",   deploy_cfg.get("battlefield_x_end",  1300)))
-            self._tap_line(x_start, x_end, y, taps, tap_interval)
+            # Support old {y, x_start, x_end} format as horizontal-line fallback.
+            def_y = int(deploy_cfg.get("battlefield_y", 750))
+            x1 = int(slot_cfg.get("x1", slot_cfg.get("x_start", deploy_cfg.get("battlefield_x_start", 300))))
+            y1 = int(slot_cfg.get("y1", slot_cfg.get("y", def_y)))
+            x2 = int(slot_cfg.get("x2", slot_cfg.get("x_end",   deploy_cfg.get("battlefield_x_end",  1300))))
+            y2 = int(slot_cfg.get("y2", slot_cfg.get("y", def_y)))
+            self._tap_line(x1, y1, x2, y2, taps, tap_interval)
 
     def _sweep_deploy(self, deploy_cfg):
         y = int(deploy_cfg.get("y", 820))
