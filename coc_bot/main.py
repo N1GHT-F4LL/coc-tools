@@ -132,8 +132,11 @@ def run_bot(settings, stop_event=None, non_interactive=False):
                         ui_manager._poll_sleep(1.0)
                 continue
 
-            home_screen.collect_resources()
-            attack_screen.run_attack_cycle()
+            actions_cfg = settings.get("actions", {})
+            if actions_cfg.get("collect_resources", True):
+                home_screen.collect_resources()
+            if actions_cfg.get("farm_attack", True):
+                attack_screen.run_attack_cycle()
 
             logger.info(f"Cycle {cycle} complete.")
 

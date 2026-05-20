@@ -23,7 +23,13 @@
     "long_max": 4.0
   },
   "jitter": {
-    "radius": 5
+    "radius": 5.0
+  },
+  "actions": {
+    "collect_resources": true,
+    "farm_attack": true,
+    "request_clan_troops": false,
+    "clan_games": false
   },
   "attack": {
     "loot_by_icon": {

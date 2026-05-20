@@ -4,7 +4,7 @@ import math
 
 class Humanize:
     def __init__(self, settings):
-        self.jitter_radius = settings.get("jitter", {}).get("radius", 5)
+        self.jitter_radius = int(settings.get("jitter", {}).get("radius", 5))
 
     def get_jittered_coords(self, x, y):
         jx = x + random.randint(-self.jitter_radius, self.jitter_radius)

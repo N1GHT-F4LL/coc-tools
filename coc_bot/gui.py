@@ -161,7 +161,7 @@ class ClickableImageLabel(QLabel):
         self.setCursor(Qt.CrossCursor)
         self.setMinimumSize(480, 270)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self.setStyleSheet("background:#1a1a2e; border:1px solid #444;")
+        self.setStyleSheet("background:#11111b; border:1px solid #313244; border-radius:6px;")
         self.setText("No screenshot yet.\nClick 'Capture Screenshot' to begin.")
 
     # --- public API ---
@@ -227,125 +227,173 @@ class ClickableImageLabel(QLabel):
 # ---------------------------------------------------------------------------
 
 _DARK_STYLE = """
-QWidget          { background: #1a1a2e; color: #d0d0e8; }
-QMainWindow      { background: #1a1a2e; }
-QDialog          { background: #1a1a2e; }
-QMessageBox      { background: #1a1a2e; }
+/* ═══════════════════════════════════════════════════
+   Catppuccin Mocha — high-contrast, easy on the eyes
+   ═══════════════════════════════════════════════════ */
 
-QTabWidget::pane { border: 1px solid #3a3a5c; top: -1px; }
+/* ── Base ─────────────────────────────────────────── */
+* { font-family: "Segoe UI", Arial, sans-serif; }
+QWidget     { background: #1e1e2e; color: #cdd6f4; font-size: 10pt; }
+QMainWindow { background: #181825; }
+QDialog     { background: #1e1e2e; }
+QMessageBox { background: #1e1e2e; }
+QMessageBox QLabel { color: #cdd6f4; }
+
+/* ── Tab bar — underline style ────────────────────── */
+QTabWidget::pane { border: none; border-top: 1px solid #313244; background: #1e1e2e; }
+QTabBar          { background: #181825; }
 QTabBar::tab {
-    background: #252540; color: #888;
-    padding: 7px 20px; margin-right: 2px;
-    border: 1px solid #3a3a5c;
-    border-radius: 4px 4px 0 0;
+    background: transparent; color: #6c7086;
+    padding: 11px 26px; border: none;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px; font-weight: 500;
 }
-QTabBar::tab:selected {
-    background: #1a1a2e; color: #d0d0e8;
-    border-color: #6655cc; border-bottom-color: #1a1a2e;
-}
-QTabBar::tab:hover:!selected { background: #2e2e50; color: #bbb; }
+QTabBar::tab:selected        { color: #cdd6f4; border-bottom: 2px solid #89b4fa; }
+QTabBar::tab:hover:!selected { color: #a6adc8; border-bottom: 2px solid #45475a; }
 
+/* ── Buttons (default) ────────────────────────────── */
 QPushButton {
-    background: #2a2a46; color: #d0d0e8;
-    border: 1px solid #464670; border-radius: 5px;
-    padding: 5px 14px; min-height: 26px;
+    background: #313244; color: #cdd6f4;
+    border: 1px solid #45475a; border-radius: 6px;
+    padding: 5px 16px; min-height: 28px; font-weight: 500;
 }
-QPushButton:hover   { background: #353560; border-color: #8877ee; }
-QPushButton:pressed { background: #5544aa; color: #fff; }
-QPushButton:disabled { background: #1e1e32; color: #484868; border-color: #2e2e48; }
+QPushButton:hover   { background: #45475a; border-color: #89b4fa; color: #e6e9ef; }
+QPushButton:pressed { background: #585b70; border-color: #89b4fa; color: #cdd6f4; }
+QPushButton:disabled { background: #1e1e2e; color: #45475a; border-color: #313244; }
 
-QLineEdit, QSpinBox, QDoubleSpinBox {
-    background: #20203a; color: #d0d0e8;
-    border: 1px solid #464670; border-radius: 4px;
-    padding: 3px 7px; min-height: 22px;
-    selection-background-color: #5544aa;
+/* ── Primary button (Start Bot, Save) ─────────────── */
+QPushButton#btn_primary {
+    background: #89b4fa; color: #1e1e2e;
+    border: none; border-radius: 6px; font-weight: 600;
 }
-QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus { border-color: #8877ee; }
+QPushButton#btn_primary:hover   { background: #b4d0fb; color: #181825; }
+QPushButton#btn_primary:pressed { background: #74a8f8; color: #1e1e2e; }
+QPushButton#btn_primary:disabled { background: #313244; color: #6c7086; border: none; }
+
+/* ── Danger button (Stop Bot) ─────────────────────── */
+QPushButton#btn_danger {
+    background: transparent; color: #f38ba8; border: 1px solid #7d2a3a;
+}
+QPushButton#btn_danger:hover   { background: #3d1420; border-color: #f38ba8; color: #f5a8bc; }
+QPushButton#btn_danger:pressed { background: #7d2a3a; color: #f5c2e7; }
+QPushButton#btn_danger:disabled { color: #6c7086; border-color: #313244; }
+
+/* ── Inputs ───────────────────────────────────────── */
+QLineEdit, QSpinBox, QDoubleSpinBox {
+    background: #181825; color: #cdd6f4;
+    border: 1px solid #45475a; border-radius: 6px;
+    padding: 4px 10px; min-height: 28px;
+    selection-background-color: #89b4fa; selection-color: #1e1e2e;
+}
+QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus {
+    border-color: #89b4fa; background: #1e1e2e;
+}
 QSpinBox::up-button, QSpinBox::down-button,
 QDoubleSpinBox::up-button, QDoubleSpinBox::down-button {
-    background: #2a2a46; border: none; width: 16px;
+    background: #313244; border: none; width: 18px;
+    border-left: 1px solid #45475a;
 }
 QSpinBox::up-button:hover, QDoubleSpinBox::up-button:hover,
-QSpinBox::down-button:hover, QDoubleSpinBox::down-button:hover { background: #3a3a60; }
+QSpinBox::down-button:hover, QDoubleSpinBox::down-button:hover { background: #45475a; }
 
+/* ── ComboBox ─────────────────────────────────────── */
 QComboBox {
-    background: #20203a; color: #d0d0e8;
-    border: 1px solid #464670; border-radius: 4px;
-    padding: 3px 7px; min-height: 22px;
-    selection-background-color: #5544aa;
+    background: #181825; color: #cdd6f4;
+    border: 1px solid #45475a; border-radius: 6px;
+    padding: 4px 10px; min-height: 28px;
+    selection-background-color: #89b4fa; selection-color: #1e1e2e;
 }
-QComboBox:focus { border-color: #8877ee; }
-QComboBox::drop-down { background: #2a2a46; border-left: 1px solid #464670; width: 22px; }
+QComboBox:focus { border-color: #89b4fa; background: #1e1e2e; }
+QComboBox::drop-down {
+    background: #313244; border-left: 1px solid #45475a;
+    width: 24px; border-radius: 0 6px 6px 0;
+}
 QComboBox QAbstractItemView {
-    background: #20203a; color: #d0d0e8;
-    selection-background-color: #5544aa;
-    border: 1px solid #464670; outline: none;
+    background: #181825; color: #cdd6f4;
+    selection-background-color: #89b4fa; selection-color: #1e1e2e;
+    border: 1px solid #45475a; outline: none; padding: 2px;
 }
+QComboBox QAbstractItemView::item { padding: 5px 8px; min-height: 26px; border-radius: 4px; }
+QComboBox QAbstractItemView::item:selected { background: #89b4fa; color: #1e1e2e; }
 
+/* ── Lists & Tables ───────────────────────────────── */
 QListWidget, QTableWidget {
-    background: #1d1d32; color: #d0d0e8;
-    border: 1px solid #3a3a5c; border-radius: 4px;
-    gridline-color: #2e2e4e; outline: none;
+    background: #181825; color: #cdd6f4;
+    border: 1px solid #313244; border-radius: 6px;
+    gridline-color: #313244; outline: none;
+    alternate-background-color: #1e1e2e;
 }
-QListWidget::item:selected, QTableWidget::item:selected { background: #5544aa; color: #fff; }
-QListWidget::item:hover:!selected, QTableWidget::item:hover:!selected { background: #2a2a46; }
+QListWidget::item { padding: 5px 8px; border-radius: 4px; margin: 1px 4px; }
+QListWidget::item:selected        { background: #89b4fa; color: #1e1e2e; }
+QListWidget::item:hover:!selected { background: #313244; }
+QTableWidget::item:selected       { background: #89b4fa; color: #1e1e2e; }
+QTableWidget::item:hover:!selected { background: #313244; }
 
+/* ── Text areas (log) ─────────────────────────────── */
 QTextEdit, QPlainTextEdit {
-    background: #101020; color: #c0c0d8;
-    border: 1px solid #3a3a5c; border-radius: 4px;
-    selection-background-color: #5544aa;
+    background: #11111b; color: #bac2de;
+    border: 1px solid #313244; border-radius: 6px;
+    selection-background-color: #89b4fa; selection-color: #1e1e2e;
+    padding: 4px;
 }
 
+/* ── Group boxes ──────────────────────────────────── */
 QGroupBox {
-    border: 1px solid #3a3a5c; border-radius: 6px;
-    margin-top: 14px; padding: 8px;
-    color: #9090cc; font-weight: bold;
+    background: #181825; border: 1px solid #313244; border-radius: 8px;
+    margin-top: 20px; padding: 14px 10px 10px 10px;
+    font-weight: 600; color: #a6adc8;
 }
 QGroupBox::title {
     subcontrol-origin: margin; subcontrol-position: top left;
-    left: 10px; padding: 0 5px; color: #9090cc;
+    left: 14px; padding: 2px 8px;
+    color: #b4befe; background: #181825; border-radius: 4px;
 }
 
+/* ── Scroll bars ──────────────────────────────────── */
 QScrollArea { background: transparent; border: none; }
-QScrollBar:vertical {
-    background: #1a1a2e; width: 10px; margin: 0; border: none;
-}
-QScrollBar::handle:vertical {
-    background: #3a3a60; border-radius: 5px; min-height: 20px;
-}
-QScrollBar::handle:vertical:hover { background: #6655cc; }
-QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
-QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: none; }
-QScrollBar:horizontal {
-    background: #1a1a2e; height: 10px; margin: 0; border: none;
-}
-QScrollBar::handle:horizontal {
-    background: #3a3a60; border-radius: 5px; min-width: 20px;
-}
-QScrollBar::handle:horizontal:hover { background: #6655cc; }
-QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal { width: 0; }
+QScrollBar:vertical   { background: transparent; width: 8px;  margin: 0; border: none; }
+QScrollBar:horizontal { background: transparent; height: 8px; margin: 0; border: none; }
+QScrollBar::handle:vertical   { background: #45475a; border-radius: 4px; min-height: 24px; }
+QScrollBar::handle:horizontal { background: #45475a; border-radius: 4px; min-width:  24px; }
+QScrollBar::handle:vertical:hover, QScrollBar::handle:horizontal:hover { background: #89b4fa; }
+QScrollBar::add-line:vertical,  QScrollBar::sub-line:vertical   { height: 0; }
+QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal { width:  0; }
+QScrollBar::add-page:vertical,   QScrollBar::sub-page:vertical,
 QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal { background: none; }
 
-QSplitter::handle { background: #3a3a5c; }
-QSplitter::handle:horizontal { width: 3px; }
-QSplitter::handle:vertical   { height: 3px; }
+/* ── Splitter ─────────────────────────────────────── */
+QSplitter::handle            { background: #313244; }
+QSplitter::handle:horizontal { width: 1px; }
+QSplitter::handle:vertical   { height: 1px; }
 
+/* ── Table headers ────────────────────────────────── */
 QHeaderView::section {
-    background: #252540; color: #9090cc;
-    border: 1px solid #3a3a5c; padding: 4px 6px;
+    background: #1e1e2e; color: #a6adc8;
+    border: none; border-bottom: 1px solid #313244;
+    border-right: 1px solid #313244;
+    padding: 6px 8px; font-weight: 600;
 }
+QHeaderView { background: transparent; }
 
-QCheckBox { color: #d0d0e8; spacing: 7px; }
+/* ── Checkboxes ───────────────────────────────────── */
+QCheckBox { color: #cdd6f4; spacing: 8px; }
 QCheckBox::indicator {
     width: 16px; height: 16px;
-    border: 1px solid #464670; border-radius: 3px;
-    background: #20203a;
+    border: 1.5px solid #585b70; border-radius: 4px;
+    background: #181825;
 }
-QCheckBox::indicator:checked { background: #6655cc; border-color: #8877ee; }
-QCheckBox::indicator:hover   { border-color: #8877ee; }
+QCheckBox::indicator:checked { background: #89b4fa; border-color: #89b4fa; }
+QCheckBox::indicator:hover   { border-color: #89b4fa; }
 
-QToolTip { background: #252540; color: #d0d0e8; border: 1px solid #6655cc; padding: 4px; }
-QLabel { color: #d0d0e8; }
+/* ── Tooltips ─────────────────────────────────────── */
+QToolTip {
+    background: #313244; color: #cdd6f4;
+    border: 1px solid #585b70; border-radius: 4px; padding: 6px 10px;
+}
+
+/* ── Labels ───────────────────────────────────────── */
+QLabel { color: #cdd6f4; }
+QFormLayout QLabel { color: #a6adc8; }
 """
 
 
@@ -366,10 +414,10 @@ class MainWindow(QMainWindow):
 
         tabs = QTabWidget()
         tabs.addTab(self._build_control_tab(),    "Control")
-        tabs.addTab(self._build_device_tab(),      "Device")
-        tabs.addTab(self._build_farm_tab(),        "Farm Settings")
-        tabs.addTab(self._build_scenarios_tab(),   "Scenarios")
-        tabs.addTab(self._build_macro_tab(),       "Macro Recorder")
+        tabs.addTab(self._build_attack_tab(),     "Attack")
+        tabs.addTab(self._build_scenarios_tab(),  "Troops")
+        tabs.addTab(self._build_macro_tab(),      "Recorder")
+        tabs.addTab(self._build_device_tab(),     "Device")
         self.setCentralWidget(tabs)
 
     # -----------------------------------------------------------------------
@@ -397,16 +445,21 @@ class MainWindow(QMainWindow):
     def _build_control_tab(self):
         w = QWidget()
         v = QVBoxLayout(w)
+        v.setContentsMargins(12, 10, 12, 10)
+        v.setSpacing(8)
 
         toolbar = QHBoxLayout()
+        toolbar.setSpacing(8)
         self._btn_start = QPushButton("▶  Start Bot")
-        self._btn_stop  = QPushButton("■  Stop Bot")
+        self._btn_start.setObjectName("btn_primary")
+        self._btn_start.setMinimumWidth(120)
+        self._btn_stop  = QPushButton("■  Stop")
+        self._btn_stop.setObjectName("btn_danger")
         self._btn_stop.setEnabled(False)
         btn_clear_log = QPushButton("Clear Log")
         self._status_lbl = QLabel("● Stopped")
-        self._status_lbl.setStyleSheet("color:#aaa; font-weight:bold;")
+        self._status_lbl.setStyleSheet("color:#6c7086; font-weight:600;")
 
-        # Log-level filter
         self._log_level_cb = QComboBox()
         self._log_level_cb.addItems(["All", "INFO+", "WARNING+"])
         self._log_level_cb.setFixedWidth(100)
@@ -420,6 +473,30 @@ class MainWindow(QMainWindow):
         toolbar.addWidget(self._log_level_cb)
         toolbar.addWidget(btn_clear_log)
         v.addLayout(toolbar)
+
+        _actions = load_settings().get("actions", {})
+        grp_act = QGroupBox("Bot Actions")
+        ah = QHBoxLayout(grp_act)
+        ah.setSpacing(14)
+        self._act_collect = QCheckBox("Collect Resources")
+        self._act_collect.setChecked(_actions.get("collect_resources", True))
+        self._act_farm = QCheckBox("Farm Attack")
+        self._act_farm.setChecked(_actions.get("farm_attack", True))
+        _cb_troops = QCheckBox("Clan Troops  (soon)")
+        _cb_troops.setEnabled(False)
+        _cb_games  = QCheckBox("Clan Games  (soon)")
+        _cb_games.setEnabled(False)
+        _btn_save_act = QPushButton("Save")
+        _btn_save_act.setFixedWidth(70)
+        _btn_save_act.clicked.connect(self._save_actions)
+        ah.addWidget(self._act_collect)
+        ah.addWidget(self._act_farm)
+        ah.addSpacing(8)
+        ah.addWidget(_cb_troops)
+        ah.addWidget(_cb_games)
+        ah.addStretch()
+        ah.addWidget(_btn_save_act)
+        v.addWidget(grp_act)
 
         self._log_view = QTextEdit()
         self._log_view.setReadOnly(True)
@@ -455,7 +532,7 @@ class MainWindow(QMainWindow):
         if filter_text == "WARNING+" and level not in ("WARNING", "ERROR", "CRITICAL"):
             return
 
-        color = {"ERROR": "#f55", "WARNING": "#fa0", "DEBUG": "#777"}.get(level, "#ccc")
+        color = {"ERROR": "#f38ba8", "WARNING": "#f9e2af", "DEBUG": "#585b70"}.get(level, "#bac2de")
         self._log_view.append(f'<span style="color:{color};">{_html.escape(msg)}</span>')
         self._log_view.moveCursor(QTextCursor.End)
 
@@ -470,20 +547,30 @@ class MainWindow(QMainWindow):
     def _on_bot_status(self, status):
         if status == "running":
             self._status_lbl.setText("● Running")
-            self._status_lbl.setStyleSheet("color:#4f4; font-weight:bold;")
+            self._status_lbl.setStyleSheet("color:#a6e3a1; font-weight:600;")
         elif status == "stopped":
             self._status_lbl.setText("● Stopped")
-            self._status_lbl.setStyleSheet("color:#aaa; font-weight:bold;")
+            self._status_lbl.setStyleSheet("color:#6c7086; font-weight:600;")
             self._btn_start.setEnabled(True)
             self._btn_stop.setEnabled(False)
         elif status.startswith("error:"):
             self._status_lbl.setText(f"● Error: {status[6:][:70]}")
-            self._status_lbl.setStyleSheet("color:#f55; font-weight:bold;")
+            self._status_lbl.setStyleSheet("color:#f38ba8; font-weight:600;")
             self._btn_start.setEnabled(True)
             self._btn_stop.setEnabled(False)
 
+    def _save_actions(self):
+        s = load_settings()
+        s.setdefault("actions", {})
+        s["actions"]["collect_resources"]   = self._act_collect.isChecked()
+        s["actions"]["farm_attack"]         = self._act_farm.isChecked()
+        s["actions"]["request_clan_troops"] = False
+        s["actions"]["clan_games"]          = False
+        save_settings(s)
+        QMessageBox.information(self, "Saved", "Action settings saved.")
+
     # -----------------------------------------------------------------------
-    # Tab 2 — Device
+    # Tab 3 — Device
     # -----------------------------------------------------------------------
 
     _PROFILE_DEFAULT_SERIALS = {
@@ -511,7 +598,9 @@ class MainWindow(QMainWindow):
         outer.addWidget(scroll)
 
         s = load_settings()
-        dev = s.get("device", {})
+        dev    = s.get("device", {})
+        delays = s.get("delays", {})
+        jitter = s.get("jitter", {})
 
         def hrow(*widgets):
             c = QWidget()
@@ -521,6 +610,13 @@ class MainWindow(QMainWindow):
             for ww in widgets:
                 h.addWidget(ww)
             return c
+
+        def dspin(lo, hi, val, dec=2):
+            sb = QDoubleSpinBox()
+            sb.setRange(lo, hi)
+            sb.setDecimals(dec)
+            sb.setValue(val)
+            return sb
 
         # ── Emulator Profile ─────────────────────────────────────────────────
         grp_prof = QGroupBox("Emulator Profile")
@@ -585,6 +681,7 @@ class MainWindow(QMainWindow):
         btn_test.setFixedWidth(190)
         self._dev_adb_result = QLabel("—")
         self._dev_adb_result.setWordWrap(True)
+        self._dev_adb_result.setStyleSheet("color:#6c7086; font-size:9pt;")
         cf.addRow("", hrow(btn_test))
         cf.addRow("Result", self._dev_adb_result)
 
@@ -617,8 +714,28 @@ class MainWindow(QMainWindow):
 
         v.addWidget(grp_disp)
 
+        # ── Timing & Jitter ──────────────────────────────────────────────────
+        grp_timing = QGroupBox("Timing & Jitter")
+        tf = QFormLayout(grp_timing)
+        tf.setSpacing(8)
+        tf.setLabelAlignment(Qt.AlignRight)
+
+        self._spin_s_min  = dspin(0, 60,  delays.get("short_min",  0.5))
+        self._spin_s_max  = dspin(0, 60,  delays.get("short_max",  1.5))
+        self._spin_l_min  = dspin(0, 120, delays.get("long_min",   2.0))
+        self._spin_l_max  = dspin(0, 120, delays.get("long_max",   4.0))
+        self._spin_jitter = dspin(0, 100, jitter.get("radius",     5.0), dec=1)
+        tf.addRow("Short delay min (s)",  self._spin_s_min)
+        tf.addRow("Short delay max (s)",  self._spin_s_max)
+        tf.addRow("Long delay min (s)",   self._spin_l_min)
+        tf.addRow("Long delay max (s)",   self._spin_l_max)
+        tf.addRow("Jitter radius (px)",   self._spin_jitter)
+        v.addWidget(grp_timing)
+
         # ── Save ─────────────────────────────────────────────────────────────
         btn_save = QPushButton("Save Device Settings")
+        btn_save.setObjectName("btn_primary")
+        btn_save.setFixedWidth(190)
         v.addWidget(btn_save)
         v.addStretch()
 
@@ -655,7 +772,7 @@ class MainWindow(QMainWindow):
         adb = self._dev_adb_path.text().strip() or _shutil.which("adb")
         if not adb:
             self._dev_adb_result.setText("adb not found in PATH.")
-            self._dev_adb_result.setStyleSheet("color:#f55;")
+            self._dev_adb_result.setStyleSheet("color:#f38ba8;")
             return
         try:
             res = subprocess.run([adb, "devices"], capture_output=True, text=True, timeout=5)
@@ -663,13 +780,13 @@ class MainWindow(QMainWindow):
                      if l.strip() and "List of devices" not in l]
             if lines:
                 self._dev_adb_result.setText("\n".join(lines))
-                self._dev_adb_result.setStyleSheet("color:#5c5;")
+                self._dev_adb_result.setStyleSheet("color:#a6e3a1;")
             else:
                 self._dev_adb_result.setText("No devices found.")
-                self._dev_adb_result.setStyleSheet("color:#fa0;")
+                self._dev_adb_result.setStyleSheet("color:#f9e2af;")
         except Exception as e:
             self._dev_adb_result.setText(f"Error: {e}")
-            self._dev_adb_result.setStyleSheet("color:#f55;")
+            self._dev_adb_result.setStyleSheet("color:#f38ba8;")
 
     def _save_device(self):
         s = load_settings()
@@ -686,29 +803,43 @@ class MainWindow(QMainWindow):
         d["enforce_resolution"]  = self._dev_enforce_res.isChecked()
         d["target_resolution"]   = self._dev_res.currentText().strip()
         d["target_density"]      = self._dev_density.value()
+        s["delays"]["short_min"] = self._spin_s_min.value()
+        s["delays"]["short_max"] = self._spin_s_max.value()
+        s["delays"]["long_min"]  = self._spin_l_min.value()
+        s["delays"]["long_max"]  = self._spin_l_max.value()
+        s["jitter"]["radius"]    = self._spin_jitter.value()
         save_settings(s)
         QMessageBox.information(self, "Saved", "Device settings saved.")
 
     # -----------------------------------------------------------------------
-    # Tab 3 — Farm Settings
+    # Tab 4 — Attack
     # -----------------------------------------------------------------------
 
-    def _build_farm_tab(self):
+    def _build_attack_tab(self):
         w = QWidget()
-        v = QVBoxLayout(w)
+        outer = QVBoxLayout(w)
+        outer.setContentsMargins(0, 0, 0, 0)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QScrollArea.NoFrame)
+        inner = QWidget()
+        v = QVBoxLayout(inner)
+        v.setContentsMargins(20, 16, 20, 16)
+        v.setSpacing(14)
         v.setAlignment(Qt.AlignTop)
+        scroll.setWidget(inner)
+        outer.addWidget(scroll)
 
         s = load_settings()
         farm   = s.get("farm", {})
-        delays = s.get("delays", {})
-        jitter = s.get("jitter", {})
-
-        form = QFormLayout()
+        deploy = s.get("attack", {}).get("deploy", {})
 
         def spin(lo, hi, val):
             sb = QSpinBox()
             sb.setRange(lo, hi)
             sb.setValue(val)
+            sb.setSingleStep(10000)
             return sb
 
         def dspin(lo, hi, val, dec=2):
@@ -718,47 +849,110 @@ class MainWindow(QMainWindow):
             sb.setValue(val)
             return sb
 
-        self._spin_gold   = spin(0, 9_999_999, farm.get("min_gold", 500_000))
-        self._spin_elixir = spin(0, 9_999_999, farm.get("min_elixir", 500_000))
+        # ── Loot Thresholds ──────────────────────────────────────────────────
+        grp_loot = QGroupBox("Loot Thresholds")
+        lf = QFormLayout(grp_loot)
+        lf.setSpacing(10)
+        lf.setLabelAlignment(Qt.AlignRight)
+
+        self._spin_gold   = spin(0, 9_999_999, farm.get("min_gold",        500_000))
+        self._spin_elixir = spin(0, 9_999_999, farm.get("min_elixir",      500_000))
         self._spin_dark   = spin(0, 99_999,    farm.get("min_dark_elixir", 500))
-        form.addRow("Min Gold",        self._spin_gold)
-        form.addRow("Min Elixir",      self._spin_elixir)
-        form.addRow("Min Dark Elixir", self._spin_dark)
+        self._spin_dark.setSingleStep(100)
+        lf.addRow("Min Gold",        self._spin_gold)
+        lf.addRow("Min Elixir",      self._spin_elixir)
+        lf.addRow("Min Dark Elixir", self._spin_dark)
+        v.addWidget(grp_loot)
 
-        self._spin_s_min = dspin(0, 60, delays.get("short_min", 0.5))
-        self._spin_s_max = dspin(0, 60, delays.get("short_max", 1.5))
-        self._spin_l_min = dspin(0, 120, delays.get("long_min", 2.0))
-        self._spin_l_max = dspin(0, 120, delays.get("long_max", 4.0))
-        self._spin_jitter = dspin(0, 100, jitter.get("radius", 5), dec=1)
-        form.addRow("Short delay min (s)", self._spin_s_min)
-        form.addRow("Short delay max (s)", self._spin_s_max)
-        form.addRow("Long delay min (s)",  self._spin_l_min)
-        form.addRow("Long delay max (s)",  self._spin_l_max)
-        form.addRow("Jitter radius (px)",  self._spin_jitter)
+        # ── Active Scenario ──────────────────────────────────────────────────
+        grp_scen = QGroupBox("Active Scenario")
+        sf = QFormLayout(grp_scen)
+        sf.setSpacing(10)
+        sf.setLabelAlignment(Qt.AlignRight)
 
-        btn_save = QPushButton("Save Settings")
-        btn_save.clicked.connect(self._save_farm)
+        self._atk_scenario_cb = QComboBox()
+        for name in list_scenarios():
+            self._atk_scenario_cb.addItem(name)
+        cur = deploy.get("active_scenario", "")
+        if cur:
+            idx = self._atk_scenario_cb.findText(cur)
+            if idx >= 0:
+                self._atk_scenario_cb.setCurrentIndex(idx)
+        sf.addRow("Scenario", self._atk_scenario_cb)
 
-        v.addLayout(form)
-        v.addSpacing(12)
+        btn_set_active = QPushButton("Set Active")
+        btn_set_active.setFixedWidth(100)
+        btn_set_active.clicked.connect(self._atk_set_active)
+        sf.addRow("", btn_set_active)
+        v.addWidget(grp_scen)
+
+        # ── Deploy Settings ──────────────────────────────────────────────────
+        grp_dep = QGroupBox("Deploy Settings")
+        df = QFormLayout(grp_dep)
+        df.setSpacing(10)
+        df.setLabelAlignment(Qt.AlignRight)
+
+        self._atk_mode = QComboBox()
+        self._atk_mode.addItems(["slot", "sweep"])
+        self._atk_mode.setCurrentText(deploy.get("mode", "slot"))
+        df.addRow("Attack Mode", self._atk_mode)
+
+        bar = deploy.get("troop_bar_region", [0, 730, 1600, 910])
+        self._atk_bar_x1 = QSpinBox(); self._atk_bar_x1.setRange(0, 3000); self._atk_bar_x1.setValue(int(bar[0]))
+        self._atk_bar_y1 = QSpinBox(); self._atk_bar_y1.setRange(0, 3000); self._atk_bar_y1.setValue(int(bar[1]))
+        self._atk_bar_x2 = QSpinBox(); self._atk_bar_x2.setRange(0, 3000); self._atk_bar_x2.setValue(int(bar[2]))
+        self._atk_bar_y2 = QSpinBox(); self._atk_bar_y2.setRange(0, 3000); self._atk_bar_y2.setValue(int(bar[3]))
+
+        bar_row1 = QWidget()
+        br1 = QHBoxLayout(bar_row1); br1.setContentsMargins(0, 0, 0, 0); br1.setSpacing(6)
+        br1.addWidget(QLabel("x1")); br1.addWidget(self._atk_bar_x1)
+        br1.addWidget(QLabel("y1")); br1.addWidget(self._atk_bar_y1)
+        bar_row2 = QWidget()
+        br2 = QHBoxLayout(bar_row2); br2.setContentsMargins(0, 0, 0, 0); br2.setSpacing(6)
+        br2.addWidget(QLabel("x2")); br2.addWidget(self._atk_bar_x2)
+        br2.addWidget(QLabel("y2")); br2.addWidget(self._atk_bar_y2)
+        df.addRow("Bar region (top)", bar_row1)
+        df.addRow("Bar region (bot)", bar_row2)
+
+        self._atk_tap_interval = dspin(0.0, 5.0, deploy.get("tap_interval", 0.15), dec=2)
+        df.addRow("Tap interval (s)", self._atk_tap_interval)
+        v.addWidget(grp_dep)
+
+        btn_save = QPushButton("Save Attack Settings")
+        btn_save.setObjectName("btn_primary")
+        btn_save.setFixedWidth(180)
+        btn_save.clicked.connect(self._save_attack)
         v.addWidget(btn_save)
+        v.addStretch()
         return w
 
-    def _save_farm(self):
+    def _atk_set_active(self):
+        name = self._atk_scenario_cb.currentText()
+        if not name:
+            return
+        s = load_settings()
+        s["attack"]["deploy"]["active_scenario"] = name
+        save_settings(s)
+        self._refresh_scenario_list()
+        QMessageBox.information(self, "Active", f"'{name}' set as active scenario.")
+
+    def _save_attack(self):
         s = load_settings()
         s["farm"]["min_gold"]        = self._spin_gold.value()
         s["farm"]["min_elixir"]      = self._spin_elixir.value()
         s["farm"]["min_dark_elixir"] = self._spin_dark.value()
-        s["delays"]["short_min"]     = self._spin_s_min.value()
-        s["delays"]["short_max"]     = self._spin_s_max.value()
-        s["delays"]["long_min"]      = self._spin_l_min.value()
-        s["delays"]["long_max"]      = self._spin_l_max.value()
-        s["jitter"]["radius"]        = self._spin_jitter.value()
+        deploy = s.setdefault("attack", {}).setdefault("deploy", {})
+        deploy["mode"]             = self._atk_mode.currentText()
+        deploy["troop_bar_region"] = [
+            self._atk_bar_x1.value(), self._atk_bar_y1.value(),
+            self._atk_bar_x2.value(), self._atk_bar_y2.value(),
+        ]
+        deploy["tap_interval"]     = self._atk_tap_interval.value()
         save_settings(s)
-        QMessageBox.information(self, "Saved", "Farm settings saved.")
+        QMessageBox.information(self, "Saved", "Attack settings saved.")
 
     # -----------------------------------------------------------------------
-    # Tab 3 — Scenarios
+    # Tab 5 — Troops (scenario editor)
     # -----------------------------------------------------------------------
 
     def _build_scenarios_tab(self):
@@ -828,7 +1022,7 @@ class MainWindow(QMainWindow):
         self._d_tmpl_cb  = QComboBox()
         self._d_thumb    = QLabel()
         self._d_thumb.setFixedSize(48, 48)
-        self._d_thumb.setStyleSheet("border:1px solid #555; background:#222;")
+        self._d_thumb.setStyleSheet("border:1px solid #313244; background:#181825; border-radius:4px;")
         tmpl_h = QHBoxLayout()
         tmpl_h.addWidget(self._d_tmpl_cb)
         tmpl_h.addWidget(self._d_thumb)
@@ -1247,7 +1441,7 @@ class MainWindow(QMainWindow):
         self._m_tmpl_cb = QComboBox()
         self._m_thumb   = QLabel()
         self._m_thumb.setFixedSize(48, 48)
-        self._m_thumb.setStyleSheet("border:1px solid #555; background:#222;")
+        self._m_thumb.setStyleSheet("border:1px solid #313244; background:#181825; border-radius:4px;")
         tmpl_h = QHBoxLayout()
         tmpl_h.addWidget(self._m_tmpl_cb)
         tmpl_h.addWidget(self._m_thumb)
@@ -1374,6 +1568,23 @@ class MainWindow(QMainWindow):
 
 
 # ---------------------------------------------------------------------------
+# Windows dark title bar
+# ---------------------------------------------------------------------------
+
+def _apply_dark_titlebar(hwnd: int) -> None:
+    """Enable dark mode for the native Win32 title bar (Windows 10 19041+ / 11)."""
+    try:
+        import ctypes
+        DWMWA_USE_IMMERSIVE_DARK_MODE = 20
+        value = ctypes.c_int(1)
+        ctypes.windll.dwmapi.DwmSetWindowAttribute(
+            hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE,
+            ctypes.byref(value), ctypes.sizeof(value))
+    except Exception:
+        pass
+
+
+# ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 
@@ -1383,6 +1594,7 @@ def main():
     app.setStyleSheet(_DARK_STYLE)
     win = MainWindow()
     win.show()
+    _apply_dark_titlebar(int(win.winId()))
     sys.exit(app.exec_())
 
 
