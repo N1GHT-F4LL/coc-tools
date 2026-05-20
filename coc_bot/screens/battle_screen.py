@@ -59,13 +59,8 @@ class BattleScreen(BaseScreen):
         return False
 
     def deploy_troops(self, deploy_cfg):
-        mode = deploy_cfg.get("mode", "sweep")
-        if mode == "slot":
-            if not self._slot_deploy(deploy_cfg):
-                logger.warning("[DEPLOY] No troop slots matched — falling back to sweep.")
-                self._sweep_deploy(deploy_cfg)
-        else:
-            self._sweep_deploy(deploy_cfg)
+        if not self._slot_deploy(deploy_cfg):
+            logger.warning("[DEPLOY] No troop slots matched — skipping deploy.")
 
     def wait_for_end(self, timeout=BATTLE_TIMEOUT):
         """Wait for a Return Home button and return its location, or None on timeout."""
@@ -226,10 +221,3 @@ class BattleScreen(BaseScreen):
             y2 = int(slot_cfg.get("y2", slot_cfg.get("y", def_y)))
             self._tap_line(x1, y1, x2, y2, taps, tap_interval)
 
-    def _sweep_deploy(self, deploy_cfg):
-        y = int(deploy_cfg.get("y", 820))
-        x_start = int(deploy_cfg.get("x_start", 300))
-        x_end = int(deploy_cfg.get("x_end", 1300))
-        taps = int(deploy_cfg.get("taps", 30))
-        logger.info(f"[DEPLOY] Sweep: {taps} taps along y={y} from x={x_start} to x={x_end}.")
-        self._tap_line(x_start, x_end, y, taps, DEPLOY_TAP_INTERVAL)

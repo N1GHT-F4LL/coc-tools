@@ -73,7 +73,6 @@
       ]
     },
     "deploy": {
-      "_note": "mode=slot detects bar icons and taps each; mode=sweep does a bottom-edge tap sweep. Sweep params kept as fallback.",
       "mode": "slot",
       "active_scenario": "Thrower",
       "troop_bar_region": [
@@ -85,11 +84,7 @@
       "battlefield_y": 750,
       "battlefield_x_start": 300,
       "battlefield_x_end": 1300,
-      "tap_interval": 0.15,
-      "y": 820,
-      "x_start": 300,
-      "x_end": 1300,
-      "taps": 30
+      "tap_interval": 0.15
     }
   }
 }

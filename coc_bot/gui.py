@@ -255,7 +255,7 @@ QTabBar::tab:hover:!selected { color: #a6adc8; border-bottom: 2px solid #45475a;
 QPushButton {
     background: #313244; color: #cdd6f4;
     border: 1px solid #45475a; border-radius: 6px;
-    padding: 5px 16px; min-height: 28px; font-weight: 500;
+    padding: 5px 10px; min-height: 28px; font-weight: 500;
 }
 QPushButton:hover   { background: #45475a; border-color: #89b4fa; color: #e6e9ef; }
 QPushButton:pressed { background: #585b70; border-color: #89b4fa; color: #cdd6f4; }
@@ -487,7 +487,6 @@ class MainWindow(QMainWindow):
         _cb_games  = QCheckBox("Clan Games  (soon)")
         _cb_games.setEnabled(False)
         _btn_save_act = QPushButton("Save")
-        _btn_save_act.setFixedWidth(70)
         _btn_save_act.clicked.connect(self._save_actions)
         ah.addWidget(self._act_collect)
         ah.addWidget(self._act_farm)
@@ -641,13 +640,11 @@ class MainWindow(QMainWindow):
         self._dev_emu_path = QLineEdit(dev.get("emulator_path", ""))
         self._dev_emu_path.setPlaceholderText("Emulator .exe path  (auto-detect if empty)")
         btn_browse_emu = QPushButton("Browse…")
-        btn_browse_emu.setFixedWidth(80)
         pf.addRow("Emulator exe", hrow(self._dev_emu_path, btn_browse_emu))
 
         self._dev_adb_path = QLineEdit(dev.get("adb_path", ""))
         self._dev_adb_path.setPlaceholderText("adb.exe path  (auto-detect from PATH if empty)")
         btn_browse_adb = QPushButton("Browse…")
-        btn_browse_adb.setFixedWidth(80)
         pf.addRow("ADB path", hrow(self._dev_adb_path, btn_browse_adb))
 
         self._dev_auto_launch = QCheckBox("Auto-launch emulator if not running")
@@ -879,7 +876,6 @@ class MainWindow(QMainWindow):
         sf.addRow("Scenario", self._atk_scenario_cb)
 
         btn_set_active = QPushButton("Set Active")
-        btn_set_active.setFixedWidth(100)
         btn_set_active.clicked.connect(self._atk_set_active)
         sf.addRow("", btn_set_active)
         v.addWidget(grp_scen)
