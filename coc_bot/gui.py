@@ -304,6 +304,7 @@ QComboBox {
     selection-background-color: #89b4fa; selection-color: #1e1e2e;
 }
 QComboBox:focus { border-color: #89b4fa; background: #1e1e2e; }
+QComboBox:on    { border-color: #89b4fa; background: #1e1e2e; }
 QComboBox::drop-down {
     background: #313244; border-left: 1px solid #45475a;
     width: 24px; border-radius: 0 6px 6px 0;
@@ -311,10 +312,12 @@ QComboBox::drop-down {
 QComboBox QAbstractItemView {
     background: #181825; color: #cdd6f4;
     selection-background-color: #89b4fa; selection-color: #1e1e2e;
+    alternate-background-color: #1e1e2e;
     border: 1px solid #45475a; outline: none; padding: 2px;
 }
 QComboBox QAbstractItemView::item { padding: 5px 8px; min-height: 26px; border-radius: 4px; }
-QComboBox QAbstractItemView::item:selected { background: #89b4fa; color: #1e1e2e; }
+QComboBox QAbstractItemView::item:selected              { background: #89b4fa; color: #1e1e2e; }
+QComboBox QAbstractItemView::item:hover:!selected       { background: #313244; }
 
 /* ── Lists & Tables ───────────────────────────────── */
 QListWidget, QTableWidget {
@@ -376,7 +379,7 @@ QHeaderView::section {
 QHeaderView { background: transparent; }
 
 /* ── Checkboxes ───────────────────────────────────── */
-QCheckBox { color: #cdd6f4; spacing: 8px; }
+QCheckBox { color: #cdd6f4; background: transparent; spacing: 8px; }
 QCheckBox::indicator {
     width: 16px; height: 16px;
     border: 1.5px solid #585b70; border-radius: 4px;
@@ -392,8 +395,8 @@ QToolTip {
 }
 
 /* ── Labels ───────────────────────────────────────── */
-QLabel { color: #cdd6f4; }
-QFormLayout QLabel { color: #a6adc8; }
+QLabel { color: #cdd6f4; background: transparent; }
+QFormLayout QLabel { color: #a6adc8; background: transparent; }
 """
 
 
@@ -603,6 +606,7 @@ class MainWindow(QMainWindow):
 
         def hrow(*widgets):
             c = QWidget()
+            c.setStyleSheet("background: transparent;")
             h = QHBoxLayout(c)
             h.setContentsMargins(0, 0, 0, 0)
             h.setSpacing(6)
@@ -812,19 +816,9 @@ class MainWindow(QMainWindow):
 
     def _build_attack_tab(self):
         w = QWidget()
-        outer = QVBoxLayout(w)
-        outer.setContentsMargins(0, 0, 0, 0)
-
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QScrollArea.NoFrame)
-        inner = QWidget()
-        v = QVBoxLayout(inner)
-        v.setContentsMargins(20, 16, 20, 16)
-        v.setSpacing(14)
-        v.setAlignment(Qt.AlignTop)
-        scroll.setWidget(inner)
-        outer.addWidget(scroll)
+        root = QVBoxLayout(w)
+        root.setContentsMargins(16, 12, 16, 12)
+        root.setSpacing(12)
 
         s = load_settings()
         farm   = s.get("farm", {})
@@ -844,7 +838,20 @@ class MainWindow(QMainWindow):
             sb.setValue(val)
             return sb
 
-        # ── Loot Thresholds ──────────────────────────────────────────────────
+        # ── Two columns ──────────────────────────────────────────────────────
+        cols = QHBoxLayout()
+        cols.setSpacing(16)
+        cols.setAlignment(Qt.AlignTop)
+
+        left = QWidget(); left.setStyleSheet("background: transparent;")
+        lv = QVBoxLayout(left); lv.setContentsMargins(0, 0, 0, 0); lv.setSpacing(12)
+        lv.setAlignment(Qt.AlignTop)
+
+        right = QWidget(); right.setStyleSheet("background: transparent;")
+        rv = QVBoxLayout(right); rv.setContentsMargins(0, 0, 0, 0); rv.setSpacing(12)
+        rv.setAlignment(Qt.AlignTop)
+
+        # ── Left: Loot Thresholds ────────────────────────────────────────────
         grp_loot = QGroupBox("Loot Thresholds")
         lf = QFormLayout(grp_loot)
         lf.setSpacing(10)
@@ -857,9 +864,9 @@ class MainWindow(QMainWindow):
         lf.addRow("Min Gold",        self._spin_gold)
         lf.addRow("Min Elixir",      self._spin_elixir)
         lf.addRow("Min Dark Elixir", self._spin_dark)
-        v.addWidget(grp_loot)
+        lv.addWidget(grp_loot)
 
-        # ── Active Scenario ──────────────────────────────────────────────────
+        # ── Left: Active Scenario ────────────────────────────────────────────
         grp_scen = QGroupBox("Active Scenario")
         sf = QFormLayout(grp_scen)
         sf.setSpacing(10)
@@ -878,40 +885,47 @@ class MainWindow(QMainWindow):
         btn_set_active = QPushButton("Set Active")
         btn_set_active.clicked.connect(self._atk_set_active)
         sf.addRow("", btn_set_active)
-        v.addWidget(grp_scen)
+        lv.addWidget(grp_scen)
 
-        # ── Deploy Settings ──────────────────────────────────────────────────
-        grp_dep = QGroupBox("Deploy Settings")
-        df = QFormLayout(grp_dep)
-        df.setSpacing(10)
-        df.setLabelAlignment(Qt.AlignRight)
+        # ── Right: Troop Bar Region ──────────────────────────────────────────
+        grp_bar = QGroupBox("Troop Bar Region")
+        bf = QFormLayout(grp_bar)
+        bf.setSpacing(10)
+        bf.setLabelAlignment(Qt.AlignRight)
 
         bar = deploy.get("troop_bar_region", [0, 730, 1600, 910])
         self._atk_bar_x1 = QSpinBox(); self._atk_bar_x1.setRange(0, 3000); self._atk_bar_x1.setValue(int(bar[0]))
         self._atk_bar_y1 = QSpinBox(); self._atk_bar_y1.setRange(0, 3000); self._atk_bar_y1.setValue(int(bar[1]))
         self._atk_bar_x2 = QSpinBox(); self._atk_bar_x2.setRange(0, 3000); self._atk_bar_x2.setValue(int(bar[2]))
         self._atk_bar_y2 = QSpinBox(); self._atk_bar_y2.setRange(0, 3000); self._atk_bar_y2.setValue(int(bar[3]))
+        bf.addRow("Left",   self._atk_bar_x1)
+        bf.addRow("Top",    self._atk_bar_y1)
+        bf.addRow("Right",  self._atk_bar_x2)
+        bf.addRow("Bottom", self._atk_bar_y2)
+        rv.addWidget(grp_bar)
 
-        bar_row1 = QWidget()
-        br1 = QHBoxLayout(bar_row1); br1.setContentsMargins(0, 0, 0, 0); br1.setSpacing(6)
-        br1.addWidget(QLabel("x1")); br1.addWidget(self._atk_bar_x1)
-        br1.addWidget(QLabel("y1")); br1.addWidget(self._atk_bar_y1)
-        bar_row2 = QWidget()
-        br2 = QHBoxLayout(bar_row2); br2.setContentsMargins(0, 0, 0, 0); br2.setSpacing(6)
-        br2.addWidget(QLabel("x2")); br2.addWidget(self._atk_bar_x2)
-        br2.addWidget(QLabel("y2")); br2.addWidget(self._atk_bar_y2)
-        df.addRow("Bar region (top)", bar_row1)
-        df.addRow("Bar region (bot)", bar_row2)
+        # ── Right: Tap Settings ──────────────────────────────────────────────
+        grp_tap = QGroupBox("Tap Settings")
+        tf = QFormLayout(grp_tap)
+        tf.setSpacing(10)
+        tf.setLabelAlignment(Qt.AlignRight)
 
         self._atk_tap_interval = dspin(0.0, 5.0, deploy.get("tap_interval", 0.15), dec=2)
-        df.addRow("Tap interval (s)", self._atk_tap_interval)
-        v.addWidget(grp_dep)
+        tf.addRow("Interval (s)", self._atk_tap_interval)
+        rv.addWidget(grp_tap)
 
+        cols.addWidget(left)
+        cols.addWidget(right)
+        root.addLayout(cols)
+        root.addStretch()
+
+        btn_row = QHBoxLayout()
+        btn_row.addStretch()
         btn_save = QPushButton("Save")
         btn_save.setObjectName("btn_primary")
         btn_save.clicked.connect(self._save_attack)
-        v.addWidget(btn_save)
-        v.addStretch()
+        btn_row.addWidget(btn_save)
+        root.addLayout(btn_row)
         return w
 
     def _atk_set_active(self):
@@ -1062,9 +1076,19 @@ class MainWindow(QMainWindow):
         rv.addWidget(self._d_delay_grp)
         self._d_delay_grp.hide()
 
+        self._slot_editor = right
+        self._slot_editor.hide()
+
+        _filler = QWidget()
+        _filler.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        _filler.setStyleSheet("background: transparent;")
+        _fill_h = QHBoxLayout(_filler)
+        _fill_h.setContentsMargins(0, 0, 0, 0)
+        _fill_h.addWidget(self._slot_editor, 1)
+
         root.addWidget(sc_panel)
         root.addWidget(slot_panel)
-        root.addWidget(right)
+        root.addWidget(_filler)
 
         self._fill_template_combo(self._d_tmpl_cb, "Troops")
         self._d_cat_cb.currentTextChanged.connect(
@@ -1109,6 +1133,7 @@ class MainWindow(QMainWindow):
             if 0 <= self._current_deploy_row < len(self._slots_data):
                 self._collect_slot(self._current_deploy_row)
             save_scenario(self._current_scenario, self._slots_data)
+        self._slot_editor.hide()
         names = list_scenarios()
         if row < 0 or row >= len(names):
             self._current_scenario = None
@@ -1125,6 +1150,8 @@ class MainWindow(QMainWindow):
             return
         name = name.strip()
         save_scenario(name, [])
+        self._slots_data = []
+        self._current_deploy_row = -1
         self._current_scenario = name
         self._refresh_scenario_list()
         self._load_deploy_slots()
@@ -1249,6 +1276,7 @@ class MainWindow(QMainWindow):
         if 0 <= self._current_deploy_row < len(self._slots_data):
             self._collect_slot(self._current_deploy_row)
         self._current_deploy_row = row
+        self._slot_editor.setVisible(0 <= row < len(self._slots_data))
         if row < 0 or row >= len(self._slots_data):
             return
         slot = self._slots_data[row]
@@ -1383,15 +1411,7 @@ class MainWindow(QMainWindow):
     def _build_macro_tab(self):
         w = QWidget()
         v = QVBoxLayout(w)
-
-        # Top bar
-        top = QHBoxLayout()
-        btn_cap = QPushButton("Capture Screenshot")
-        self._m_res_lbl = QLabel("No screenshot captured")
-        top.addWidget(btn_cap)
-        top.addWidget(self._m_res_lbl)
-        top.addStretch()
-        v.addLayout(top)
+        v.setContentsMargins(0, 0, 0, 0)
 
         # Splitter: image | controls
         splitter = QSplitter(Qt.Horizontal)
@@ -1408,6 +1428,13 @@ class MainWindow(QMainWindow):
         right.setMinimumWidth(230)
         right.setMaximumWidth(290)
         rv = QVBoxLayout(right)
+
+        btn_cap = QPushButton("Capture Screenshot")
+        btn_cap.setObjectName("btn_primary")
+        self._m_res_lbl = QLabel("No screenshot captured")
+        rv.addWidget(btn_cap)
+        rv.addWidget(self._m_res_lbl)
+        rv.addSpacing(6)
 
         rv.addWidget(QLabel("Recorded Points"))
         self._m_pts_list = QListWidget()
