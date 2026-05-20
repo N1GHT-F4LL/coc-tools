@@ -152,15 +152,6 @@
           425
         ]
       ]
-    },
-    {
-      "template": "units/troops/barbarian",
-      "taps": 5,
-      "strategy": "line",
-      "x1": 300,
-      "y1": 760,
-      "x2": 1300,
-      "y2": 760
     }
   ]
 }
