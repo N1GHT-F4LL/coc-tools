@@ -93,8 +93,13 @@ class BattleScreen(BaseScreen):
     # ------------------------------------------------------------------
 
     def _slot_deploy(self, deploy_cfg):
-        slots = deploy_cfg.get("slots", [])
-        if not slots:
+        nodes = deploy_cfg.get("nodes")
+        # Backward compat: old linear "slots" format
+        if not nodes:
+            slots = deploy_cfg.get("slots", [])
+            nodes = [{"id": "n0", "after": [], "delay": 0, "slots": slots}]
+
+        if not any(n.get("slots") for n in nodes):
             return False
 
         screen = self.ui_manager.get_screen()
@@ -115,56 +120,79 @@ class BattleScreen(BaseScreen):
         bar_crop = screen[by1:by2, bx1:bx2]
         bar_gray = None
         tap_interval = float(deploy_cfg.get("tap_interval", DEPLOY_TAP_INTERVAL))
-
         bar_center_y = (by1 + by2) // 2
         any_deployed = False
         debug_clicks = []
-        for slot in slots:
-            if slot.get("strategy") == "delay":
-                seconds = int(slot.get("seconds", 1))
-                logger.info(f"[DEPLOY] delay  {seconds}s")
-                self.ui_manager._poll_sleep(seconds)
-                any_deployed = True
-                continue
 
-            template_key = slot.get("template", "")
-            name = template_key.split("/")[-1] if "/" in template_key else template_key
-            configured_taps = int(slot.get("taps", 5))
-            fixed_bar_x = slot.get("bar_x", 0)
+        completed = set()
+        pending = list(nodes)
 
-            if fixed_bar_x:
-                slot_cx = int(fixed_bar_x)
-                slot_cy = int(slot.get("bar_y", bar_center_y))
-                logger.info(f"[DEPLOY] {name:<22} ×{configured_taps}  ({slot_cx},{slot_cy})  [fixed]")
-            else:
-                if bar_gray is None:
-                    bar_gray = cv2.cvtColor(bar_crop, cv2.COLOR_BGR2GRAY)
-                template = vision.cache.get(template_key)
-                if template is None:
-                    logger.debug(f"[DEPLOY] SKIP  {name}: not in cache")
-                    continue
+        while pending:
+            ready = [n for n in pending if all(dep in completed for dep in n.get("after", []))]
+            if not ready:
+                break  # cycle guard — stop cleanly
 
-                default_threshold = 0.40 if "siege" in template_key else 0.50
-                slot_threshold = float(slot.get("threshold", default_threshold))
-                score, scaled, result_map = vision._find_best_scale(
-                    bar_gray, template, threshold=slot_threshold, scales=SLOT_ICON_SCALES,
-                )
-                if result_map is None or scaled is None:
-                    logger.debug(f"[DEPLOY] MISS  {name}: conf={score:.2f} < thr={slot_threshold:.2f}")
-                    continue
+            for n in ready:
+                d = float(n.get("delay", 0))
+                if d > 0:
+                    time.sleep(d)
 
-                _, _, _, max_loc = cv2.minMaxLoc(result_map)
-                th, tw = scaled.shape[:2]
-                slot_cx = int(max_loc[0] + tw // 2 + bx1)
-                slot_cy = int(max_loc[1] + th // 2 + by1)
-                logger.info(f"[DEPLOY] {name:<22} ×{configured_taps}  ({slot_cx},{slot_cy})  conf={score:.2f}")
+            # Round-robin interleave: pop 1 slot from each ready node per pass
+            slot_queues = [list(n.get("slots", [])) for n in ready]
+            while any(slot_queues):
+                for q in slot_queues:
+                    if not q:
+                        continue
+                    slot = q.pop(0)
 
-            debug_clicks.append((template_key, slot_cx, slot_cy))
-            self.ui_manager.click(slot_cx, slot_cy)
-            self.ui_manager._poll_sleep(0.3)
+                    if slot.get("strategy") == "delay":
+                        seconds = int(slot.get("seconds", 1))
+                        logger.info(f"[DEPLOY] delay  {seconds}s")
+                        self.ui_manager._poll_sleep(seconds)
+                        any_deployed = True
+                        continue
 
-            self._execute_slot_strategy(slot, deploy_cfg, configured_taps, tap_interval)
-            any_deployed = True
+                    template_key = slot.get("template", "")
+                    name = template_key.split("/")[-1] if "/" in template_key else template_key
+                    configured_taps = int(slot.get("taps", 5))
+                    fixed_bar_x = slot.get("bar_x", 0)
+
+                    if fixed_bar_x:
+                        slot_cx = int(fixed_bar_x)
+                        slot_cy = int(slot.get("bar_y", bar_center_y))
+                        logger.info(f"[DEPLOY] {name:<22} ×{configured_taps}  ({slot_cx},{slot_cy})  [fixed]")
+                    else:
+                        if bar_gray is None:
+                            bar_gray = cv2.cvtColor(bar_crop, cv2.COLOR_BGR2GRAY)
+                        template = vision.cache.get(template_key)
+                        if template is None:
+                            logger.debug(f"[DEPLOY] SKIP  {name}: not in cache")
+                            continue
+
+                        default_threshold = 0.40 if "siege" in template_key else 0.50
+                        slot_threshold = float(slot.get("threshold", default_threshold))
+                        score, scaled, result_map = vision._find_best_scale(
+                            bar_gray, template, threshold=slot_threshold, scales=SLOT_ICON_SCALES,
+                        )
+                        if result_map is None or scaled is None:
+                            logger.debug(f"[DEPLOY] MISS  {name}: conf={score:.2f} < thr={slot_threshold:.2f}")
+                            continue
+
+                        _, _, _, max_loc = cv2.minMaxLoc(result_map)
+                        th, tw = scaled.shape[:2]
+                        slot_cx = int(max_loc[0] + tw // 2 + bx1)
+                        slot_cy = int(max_loc[1] + th // 2 + by1)
+                        logger.info(f"[DEPLOY] {name:<22} ×{configured_taps}  ({slot_cx},{slot_cy})  conf={score:.2f}")
+
+                    debug_clicks.append((template_key, slot_cx, slot_cy))
+                    self.ui_manager.click(slot_cx, slot_cy)
+                    self.ui_manager._poll_sleep(0.3)
+                    self._execute_slot_strategy(slot, deploy_cfg, configured_taps, tap_interval)
+                    any_deployed = True
+
+            for n in ready:
+                completed.add(n["id"])
+                pending.remove(n)
 
         self._save_bar_debug(screen, bar_crop, by1, by2, bx1, bx2, debug_clicks)
         return any_deployed

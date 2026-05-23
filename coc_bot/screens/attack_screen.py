@@ -4,6 +4,7 @@ from core.ocr import read_number_with_confidence
 from core.vision import vision
 import logging
 import os
+import random
 from datetime import datetime
 import cv2
 
@@ -199,7 +200,15 @@ class AttackScreen(BaseScreen):
         if active:
             try:
                 from core.scenario import load_scenario
-                deploy_cfg["slots"] = load_scenario(active).get("slots", [])
+                scenario = load_scenario(active)
+                variants = scenario.get("variants") or [{"nodes": [{"id": "n0", "after": [], "delay": 0, "slots": scenario.get("slots", [])}]}]
+                chosen = random.choices(variants, weights=[v.get("weight", 1) for v in variants])[0]
+                # Backward compat: old variant with "slots" key instead of "nodes"
+                if "slots" in chosen and "nodes" not in chosen:
+                    chosen = dict(chosen)
+                    chosen["nodes"] = [{"id": "n0", "after": [], "delay": 0, "slots": chosen.pop("slots")}]
+                deploy_cfg["nodes"] = chosen.get("nodes", [])
+                logger.info(f"[SCENARIO] Variant: {chosen.get('name', '?')}  weight={chosen.get('weight', 1)}  nodes={len(deploy_cfg['nodes'])}")
             except FileNotFoundError:
                 logger.warning(f"[SCENARIO] '{active}.json' not found — using settings slots")
         battle.deploy_troops(deploy_cfg)

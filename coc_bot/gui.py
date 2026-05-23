@@ -27,10 +27,11 @@ from PyQt5.QtWidgets import (
     QHeaderView, QMessageBox, QSizePolicy, QInputDialog,
     QLineEdit, QCheckBox, QFileDialog, QTreeWidget, QTreeWidgetItem,
     QStackedWidget, QRadioButton,
+    QGraphicsScene, QGraphicsView, QGraphicsItem, QGraphicsPathItem,
 )
 from core.scenario import list_scenarios, load_scenario, save_scenario, delete_scenario, rename_scenario
-from PyQt5.QtCore import Qt, QThread, QRunnable, QThreadPool, QObject, pyqtSignal
-from PyQt5.QtGui import QPixmap, QImage, QFont, QTextCursor
+from PyQt5.QtCore import Qt, QThread, QRunnable, QThreadPool, QObject, pyqtSignal, QRectF, QPointF
+from PyQt5.QtGui import QPixmap, QImage, QFont, QTextCursor, QPen, QBrush, QColor, QPainterPath, QPainter
 
 # gui.py lives in coc_bot/ — same sys.path as main.py
 SETTINGS_PATH = os.path.join(os.path.dirname(__file__), "settings.json")
@@ -437,7 +438,7 @@ QGroupBox {
 }
 QGroupBox::title {
     subcontrol-origin: margin; subcontrol-position: top left;
-    left: 14px; padding: 2px 8px;
+    left: 0px; padding: 2px 8px 2px 14px;
     color: #b4befe; background: #181825; border-radius: 4px;
 }
 
@@ -467,6 +468,31 @@ QHeaderView::section {
 }
 QHeaderView { background: transparent; }
 
+/* ── Tree views ───────────────────────────────────── */
+QTreeWidget, QTreeView {
+    background: #181825; color: #cdd6f4;
+    border: 1px solid #313244; border-radius: 6px;
+    outline: none; alternate-background-color: #1e1e2e;
+}
+QTreeWidget::item, QTreeView::item { padding: 4px 8px; border-radius: 4px; margin: 1px 4px; }
+QTreeWidget::item:selected, QTreeView::item:selected { background: #89b4fa; color: #1e1e2e; }
+QTreeWidget::item:hover:!selected, QTreeView::item:hover:!selected { background: #313244; }
+QTreeWidget::branch, QTreeView::branch { background: #181825; }
+QTreeWidget::branch:has-children:!has-siblings:closed,
+QTreeView::branch:has-children:!has-siblings:closed,
+QTreeWidget::branch:closed:has-children:has-siblings,
+QTreeView::branch:closed:has-children:has-siblings {
+    image: url(none); border-image: none;
+    color: #6c7086;
+}
+QTreeWidget::branch:open:has-children:!has-siblings,
+QTreeView::branch:open:has-children:!has-siblings,
+QTreeWidget::branch:open:has-children:has-siblings,
+QTreeView::branch:open:has-children:has-siblings {
+    image: url(none); border-image: none;
+    color: #6c7086;
+}
+
 /* ── Checkboxes ───────────────────────────────────── */
 QCheckBox { color: #cdd6f4; background: transparent; spacing: 8px; }
 QCheckBox::indicator {
@@ -476,6 +502,20 @@ QCheckBox::indicator {
 }
 QCheckBox::indicator:checked { background: #89b4fa; border-color: #89b4fa; }
 QCheckBox::indicator:hover   { border-color: #89b4fa; }
+
+/* ── Radio buttons ────────────────────────────────── */
+QRadioButton { color: #cdd6f4; background: transparent; spacing: 8px; }
+QRadioButton::indicator {
+    width: 16px; height: 16px;
+    border: 1.5px solid #585b70; border-radius: 8px;
+    background: #181825;
+}
+QRadioButton::indicator:checked {
+    background: #89b4fa; border-color: #89b4fa;
+    image: none;
+}
+QRadioButton::indicator:checked::after { }
+QRadioButton::indicator:hover { border-color: #89b4fa; }
 
 /* ── Tooltips ─────────────────────────────────────── */
 QToolTip {
@@ -490,6 +530,134 @@ QFormLayout QLabel { color: #a6adc8; background: transparent; }
 
 
 # ---------------------------------------------------------------------------
+# Graph helpers
+# ---------------------------------------------------------------------------
+
+def _topo_layers(nodes):
+    """Return nodes grouped by topological layer (list of lists of node ids)."""
+    id_to_deps = {n["id"]: set(n.get("after", [])) for n in nodes}
+    layers, placed = [], set()
+    while id_to_deps:
+        layer = [nid for nid, deps in id_to_deps.items() if deps <= placed]
+        if not layer:
+            layer = list(id_to_deps.keys())  # cycle guard
+        for nid in layer:
+            del id_to_deps[nid]
+        layers.append(layer)
+        placed |= set(layer)
+    return layers
+
+
+def _node_label(nodes, nid):
+    for n in nodes:
+        if n["id"] == nid:
+            return n.get("label", nid)
+    return nid
+
+
+class _NodeSignals(QObject):
+    clicked = pyqtSignal(str)
+
+
+class NodeItem(QGraphicsItem):
+    W, H = 120, 36
+
+    def __init__(self, nid, label, delay, x, y):
+        super().__init__()
+        self.nid = nid
+        self.label = label
+        self.delay = delay
+        self.setPos(x, y)
+        self.setFlag(QGraphicsItem.ItemIsMovable)
+        self.setAcceptHoverEvents(True)
+        self.signals = _NodeSignals()
+        self._highlighted = False
+
+    def boundingRect(self):
+        return QRectF(0, 0, self.W, self.H)
+
+    def paint(self, painter, option, widget=None):
+        bg = QColor("#89b4fa") if self._highlighted else QColor("#313244")
+        painter.setBrush(QBrush(bg))
+        painter.setPen(QPen(QColor("#cdd6f4"), 1))
+        painter.drawRoundedRect(QRectF(0, 0, self.W, self.H), 6, 6)
+        painter.setPen(QColor("#cdd6f4"))
+        text = self.label
+        if self.delay:
+            text += f" +{self.delay}s"
+        painter.drawText(QRectF(0, 0, self.W, self.H), Qt.AlignCenter, text)
+
+    def set_highlighted(self, v):
+        self._highlighted = v
+        self.update()
+
+    def set_label(self, label):
+        self.label = label
+        self.update()
+
+    def mousePressEvent(self, event):
+        super().mousePressEvent(event)
+        self.signals.clicked.emit(self.nid)
+
+
+class GraphCanvas(QGraphicsView):
+    node_selected = pyqtSignal(str)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._scene = QGraphicsScene(self)
+        self.setScene(self._scene)
+        self.setRenderHint(QPainter.Antialiasing)
+        self.setDragMode(QGraphicsView.NoDrag)
+        self._nodes = {}  # id → NodeItem
+        self.setStyleSheet(
+            "background: #11111b; border: 1px solid #313244; border-radius: 4px;"
+        )
+        self.setMinimumHeight(180)
+
+    def load_graph(self, nodes):
+        self._scene.clear()
+        self._nodes.clear()
+        if not nodes:
+            return
+        layers = _topo_layers(nodes)
+        x_gap, y_gap = 150, 60
+        id_to_center = {}
+        for col, layer in enumerate(layers):
+            for row, nid in enumerate(layer):
+                x = col * x_gap + 12
+                y = row * y_gap + 12
+                node_data = next((n for n in nodes if n["id"] == nid), {})
+                item = NodeItem(
+                    nid,
+                    node_data.get("label", nid),
+                    node_data.get("delay", 0),
+                    x, y,
+                )
+                item.signals.clicked.connect(self.node_selected)
+                self._scene.addItem(item)
+                self._nodes[nid] = item
+                id_to_center[nid] = (x + NodeItem.W // 2, y + NodeItem.H // 2)
+        for n in nodes:
+            dst_id = n["id"]
+            for dep_id in n.get("after", []):
+                if dep_id in id_to_center and dst_id in id_to_center:
+                    sx, sy = id_to_center[dep_id]
+                    dx, dy = id_to_center[dst_id]
+                    path = QPainterPath(QPointF(sx, sy))
+                    path.lineTo(QPointF(dx, dy))
+                    self._scene.addPath(path, QPen(QColor("#89b4fa"), 1.5))
+
+    def highlight_node(self, nid):
+        for nid2, item in self._nodes.items():
+            item.set_highlighted(nid2 == nid)
+
+    def update_node_label(self, nid, label):
+        if nid in self._nodes:
+            self._nodes[nid].set_label(label)
+
+
+# ---------------------------------------------------------------------------
 # Main window
 # ---------------------------------------------------------------------------
 
@@ -501,6 +669,9 @@ class MainWindow(QMainWindow):
         self._bot_thread = None
         self._studio_points = []
         self._slots_data = []
+        self._variants_data = []
+        self._current_variant_idx = 0
+        self._current_node_id = None
         self._current_deploy_row = -1
         self._current_scenario = None
 
@@ -851,6 +1022,11 @@ class MainWindow(QMainWindow):
         return w
 
     def _assets_populate_tree(self):
+        expanded = {
+            self._assets_tree.topLevelItem(i).text(0)
+            for i in range(self._assets_tree.topLevelItemCount())
+            if self._assets_tree.topLevelItem(i).isExpanded()
+        }
         self._assets_tree.clear()
         base = Path(ASSETS_PATH)
         groups = {}
@@ -867,7 +1043,8 @@ class MainWindow(QMainWindow):
                 child.setData(0, Qt.UserRole, rel)
                 top.addChild(child)
             self._assets_tree.addTopLevelItem(top)
-            top.setExpanded(True)
+            if folder in expanded:
+                top.setExpanded(True)
 
     def _assets_delete(self):
         items = self._assets_tree.selectedItems()
@@ -956,6 +1133,10 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "No Scenario",
                                 "Select or create a scenario in the Troops tab first.")
             return
+        if not self._current_node_id:
+            QMessageBox.warning(self, "No Node Selected",
+                                "Select a node in the Troops tab graph before adding a slot.")
+            return
         rel  = self._s_tmpl_cb.currentData() or ""
         taps = self._s_taps.value()
         slot = {
@@ -963,7 +1144,7 @@ class MainWindow(QMainWindow):
             "points": [[x, y] for x, y in self._studio_points],
         }
         self._slots_data.append(slot)
-        save_scenario(self._current_scenario, self._slots_data)
+        save_scenario(self._current_scenario, self._variants_data)
         self._refresh_slot_list()
         name = rel.split("/")[-1] if "/" in rel else rel
         QMessageBox.information(self, "Added",
@@ -978,6 +1159,10 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "No Scenario",
                                 "Select or create a scenario in the Troops tab first.")
             return
+        if not self._current_node_id:
+            QMessageBox.warning(self, "No Node Selected",
+                                "Select a node in the Troops tab graph before adding a slot.")
+            return
         rel  = self._s_tmpl_cb.currentData() or ""
         taps = self._s_taps.value()
         x1, y1 = self._studio_points[0]
@@ -987,7 +1172,7 @@ class MainWindow(QMainWindow):
             "x1": x1, "y1": y1, "x2": x2, "y2": y2,
         }
         self._slots_data.append(slot)
-        save_scenario(self._current_scenario, self._slots_data)
+        save_scenario(self._current_scenario, self._variants_data)
         self._refresh_slot_list()
         name = rel.split("/")[-1] if "/" in rel else rel
         QMessageBox.information(self, "Added",
@@ -1436,24 +1621,88 @@ class MainWindow(QMainWindow):
         self._scenario_list = QListWidget()
         self._scenario_list.currentRowChanged.connect(self._on_scenario_selected)
         sv.addWidget(self._scenario_list)
-        sc_btns = QHBoxLayout()
         btn_sc_new = QPushButton("+ New")
+        sv.addWidget(btn_sc_new)
+        sc_btns2 = QHBoxLayout()
         btn_sc_ren = QPushButton("Rename")
         btn_sc_del = QPushButton("Delete")
-        for b in (btn_sc_new, btn_sc_ren, btn_sc_del):
-            sc_btns.addWidget(b)
-        sv.addLayout(sc_btns)
+        sc_btns2.addWidget(btn_sc_ren)
+        sc_btns2.addWidget(btn_sc_del)
+        sv.addLayout(sc_btns2)
         btn_sc_active = QPushButton("★ Set Active")
         sv.addWidget(btn_sc_active)
 
-        # --- Slot list panel ---
-        slot_panel = QWidget()
-        slot_panel.setFixedWidth(200)
-        lv = QVBoxLayout(slot_panel)
-        lv.addWidget(QLabel("Slots  (deploy order)"))
+        # --- Variants panel ---
+        var_panel = QWidget()
+        var_panel.setFixedWidth(200)
+        vv = QVBoxLayout(var_panel)
+        vv.addWidget(QLabel("Variants"))
+        self._variant_list = QListWidget()
+        self._variant_list.currentRowChanged.connect(self._on_variant_changed)
+        vv.addWidget(self._variant_list)
+        btn_var_add = QPushButton("+ New")
+        vv.addWidget(btn_var_add)
+        var_btns2 = QHBoxLayout()
+        btn_var_ren = QPushButton("Rename")
+        btn_var_del = QPushButton("Delete")
+        var_btns2.addWidget(btn_var_ren)
+        var_btns2.addWidget(btn_var_del)
+        vv.addLayout(var_btns2)
+        wgt_row = QHBoxLayout()
+        wgt_row.addWidget(QLabel("Weight:"))
+        self._variant_weight = QSpinBox()
+        self._variant_weight.setRange(1, 999)
+        wgt_row.addWidget(self._variant_weight, 1)
+        vv.addLayout(wgt_row)
+
+        # --- Graph panel (col 2) ---
+        graph_panel = QWidget()
+        graph_panel.setFixedWidth(300)
+        gv = QVBoxLayout(graph_panel)
+        gv.addWidget(QLabel("Deploy Graph"))
+        self._graph_canvas = GraphCanvas()
+        self._graph_canvas.node_selected.connect(self._on_node_selected)
+        gv.addWidget(self._graph_canvas, 1)
+        node_btn_row = QHBoxLayout()
+        btn_node_add    = QPushButton("+ Node")
+        btn_node_rm     = QPushButton("− Node")
+        btn_node_link   = QPushButton("Link")
+        btn_node_unlink = QPushButton("Unlink")
+        for b in (btn_node_add, btn_node_rm, btn_node_link, btn_node_unlink):
+            node_btn_row.addWidget(b)
+        gv.addLayout(node_btn_row)
+
+        # --- Node properties panel (col 3, expanding, hidden until node selected) ---
+        node_props = QWidget()
+        node_props.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        node_props.setStyleSheet("background: transparent;")
+        np_v = QVBoxLayout(node_props)
+        np_v.setContentsMargins(8, 0, 0, 0)
+        np_v.setAlignment(Qt.AlignTop)
+
+        # Node header
+        node_hdr = QHBoxLayout()
+        node_hdr.addWidget(QLabel("Node:"))
+        self._node_label_edit = QLineEdit()
+        node_hdr.addWidget(self._node_label_edit, 1)
+        node_hdr.addSpacing(8)
+        node_hdr.addWidget(QLabel("Delay(s):"))
+        self._node_delay_spin = QDoubleSpinBox()
+        self._node_delay_spin.setRange(0, 30)
+        self._node_delay_spin.setSingleStep(0.5)
+        self._node_delay_spin.setFixedWidth(70)
+        node_hdr.addWidget(self._node_delay_spin)
+        np_v.addLayout(node_hdr)
+
+        sep = QWidget()
+        sep.setFixedHeight(1)
+        sep.setStyleSheet("background: #313244;")
+        np_v.addWidget(sep)
+
+        np_v.addWidget(QLabel("Slots  (deploy order)"))
         self._slot_list = QListWidget()
         self._slot_list.currentRowChanged.connect(self._on_slot_selected)
-        lv.addWidget(self._slot_list)
+        np_v.addWidget(self._slot_list)
         btn_row = QHBoxLayout()
         btn_add = QPushButton("+")
         btn_rm  = QPushButton("−")
@@ -1462,24 +1711,22 @@ class MainWindow(QMainWindow):
         for b in (btn_add, btn_rm, btn_up, btn_dn):
             b.setFixedWidth(40)
             btn_row.addWidget(b)
-        lv.addLayout(btn_row)
+        np_v.addLayout(btn_row)
         btn_save_d = QPushButton("Save")
-        lv.addWidget(btn_save_d)
+        np_v.addWidget(btn_save_d)
 
-        # --- Slot editor form ---
+        # --- Slot editor form (inside node_props) ---
         right = QWidget()
         rv = QVBoxLayout(right)
         rv.setAlignment(Qt.AlignTop)
         rv.addWidget(QLabel("Edit Selected Slot"))
 
-        # Strategy always visible
         strat_form = QFormLayout()
         self._d_strategy = QComboBox()
         self._d_strategy.addItems(["line", "points", "delay"])
         strat_form.addRow("Strategy", self._d_strategy)
         rv.addLayout(strat_form)
 
-        # Troop-specific fields — hidden when strategy == "delay"
         self._d_troop_fields = QWidget()
         form = QFormLayout(self._d_troop_fields)
         form.setContentsMargins(0, 0, 0, 0)
@@ -1545,17 +1792,15 @@ class MainWindow(QMainWindow):
 
         self._slot_editor = right
         self._slot_editor.hide()
+        np_v.addWidget(self._slot_editor)
 
-        _filler = QWidget()
-        _filler.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
-        _filler.setStyleSheet("background: transparent;")
-        _fill_h = QHBoxLayout(_filler)
-        _fill_h.setContentsMargins(0, 0, 0, 0)
-        _fill_h.addWidget(self._slot_editor, 1)
+        self._node_props_panel = node_props
+        self._node_props_panel.hide()
 
         root.addWidget(sc_panel)
-        root.addWidget(slot_panel)
-        root.addWidget(_filler)
+        root.addWidget(var_panel)
+        root.addWidget(graph_panel)
+        root.addWidget(node_props)
 
         self._fill_template_combo(self._d_tmpl_cb, "Troops")
         self._d_cat_cb.currentTextChanged.connect(
@@ -1565,6 +1810,11 @@ class MainWindow(QMainWindow):
         self._d_tmpl_cb.activated.connect(
             lambda _: self._update_slot_label())
         self._d_strategy.currentTextChanged.connect(self._toggle_deploy_strategy)
+
+        self._variant_weight.valueChanged.connect(self._on_variant_weight_changed)
+        btn_var_add.clicked.connect(self._variant_add)
+        btn_var_ren.clicked.connect(self._variant_rename)
+        btn_var_del.clicked.connect(self._variant_delete)
 
         btn_sc_new.clicked.connect(self._scenario_new)
         btn_sc_ren.clicked.connect(self._scenario_rename)
@@ -1578,6 +1828,13 @@ class MainWindow(QMainWindow):
         btn_pt_add.clicked.connect(
             lambda: self._d_pts_tbl.insertRow(self._d_pts_tbl.rowCount()))
         btn_pt_rm.clicked.connect(self._deploy_rm_pt_row)
+
+        btn_node_add.clicked.connect(self._graph_add_node)
+        btn_node_rm.clicked.connect(self._graph_del_node)
+        btn_node_link.clicked.connect(self._graph_link)
+        btn_node_unlink.clicked.connect(self._graph_unlink)
+        self._node_label_edit.textEdited.connect(self._on_node_label_changed)
+        self._node_delay_spin.valueChanged.connect(self._on_node_delay_changed)
 
         self._refresh_scenario_list()
         return w
@@ -1597,14 +1854,15 @@ class MainWindow(QMainWindow):
 
     def _on_scenario_selected(self, row):
         if self._current_scenario:
-            if 0 <= self._current_deploy_row < len(self._slots_data):
+            if self._current_node_id and 0 <= self._current_deploy_row < len(self._slots_data):
                 self._collect_slot(self._current_deploy_row)
-            save_scenario(self._current_scenario, self._slots_data)
+            save_scenario(self._current_scenario, self._variants_data)
         self._slot_editor.hide()
         names = list_scenarios()
         if row < 0 or row >= len(names):
             self._current_scenario = None
             self._slots_data = []
+            self._variants_data = []
             self._refresh_slot_list()
             return
         self._current_scenario = names[row]
@@ -1616,9 +1874,9 @@ class MainWindow(QMainWindow):
         if not ok or not name.strip():
             return
         name = name.strip()
-        save_scenario(name, [])
-        self._slots_data = []
-        self._current_deploy_row = -1
+        default_node = {"id": "n0", "label": "Deploy", "after": [], "delay": 0, "slots": []}
+        default_variants = [{"name": "Default", "weight": 1, "nodes": [default_node]}]
+        save_scenario(name, default_variants)
         self._current_scenario = name
         self._refresh_scenario_list()
         self._load_deploy_slots()
@@ -1654,7 +1912,10 @@ class MainWindow(QMainWindow):
             save_settings(s)
         self._current_scenario = None
         self._slots_data = []
-        self._refresh_slot_list()
+        self._variants_data = []
+        self._current_variant_idx = 0
+        self._current_node_id = None
+        self._refresh_graph()
         self._refresh_scenario_list()
 
     def _scenario_set_active(self):
@@ -1708,15 +1969,30 @@ class MainWindow(QMainWindow):
         lbl.setPixmap(QPixmap.fromImage(qi))
 
     def _load_deploy_slots(self):
+        default_node = {"id": "n0", "label": "Deploy", "after": [], "delay": 0, "slots": []}
         if not self._current_scenario:
+            self._variants_data = [{"name": "Default", "weight": 1, "nodes": [dict(default_node)]}]
+            self._current_variant_idx = 0
+            self._current_node_id = None
             self._slots_data = []
-            self._refresh_slot_list()
+            self._refresh_variant_list()
+            self._refresh_graph()
             return
         try:
-            self._slots_data = list(load_scenario(self._current_scenario).get("slots", []))
+            data = load_scenario(self._current_scenario)
+            variants = data.get("variants") or [{"name": "Default", "weight": 1, "slots": data.get("slots", [])}]
         except FileNotFoundError:
-            self._slots_data = []
-        self._refresh_slot_list()
+            variants = [{"name": "Default", "weight": 1, "nodes": [dict(default_node)]}]
+        # Migrate old format: variant with "slots" key → single-node graph
+        for v in variants:
+            if "slots" in v and "nodes" not in v:
+                v["nodes"] = [{"id": "n0", "label": "Deploy", "after": [], "delay": 0, "slots": v.pop("slots")}]
+        self._variants_data = variants
+        self._current_variant_idx = 0
+        self._current_node_id = None
+        self._slots_data = []
+        self._refresh_variant_list()
+        self._refresh_graph()
 
     def _update_slot_label(self):
         row = self._current_deploy_row
@@ -1821,6 +2097,9 @@ class MainWindow(QMainWindow):
                 slot.pop(k, None)
 
     def _deploy_add_slot(self):
+        if not self._current_node_id:
+            QMessageBox.information(self, "No Node", "Select a node in the graph first.")
+            return
         self._slots_data.append({
             "template": "units/troops/barbarian",
             "taps": 5, "strategy": "line",
@@ -1859,13 +2138,205 @@ class MainWindow(QMainWindow):
         if row >= 0:
             self._d_pts_tbl.removeRow(row)
 
+    # -----------------------------------------------------------------------
+    # Graph canvas methods
+    # -----------------------------------------------------------------------
+
+    def _refresh_graph(self, keep_selected=None):
+        v = self._variants_data[self._current_variant_idx] if self._variants_data else None
+        nodes = v.get("nodes", []) if v else []
+        self._graph_canvas.load_graph(nodes)
+        if keep_selected and any(n["id"] == keep_selected for n in nodes):
+            self._graph_canvas.highlight_node(keep_selected)
+        else:
+            self._current_node_id = None
+            self._current_deploy_row = -1
+            self._slots_data = []
+            self._refresh_slot_list()
+            self._node_props_panel.setVisible(False)
+
+    def _on_node_selected(self, nid):
+        if self._current_node_id and 0 <= self._current_deploy_row < len(self._slots_data):
+            self._collect_slot(self._current_deploy_row)
+        self._current_node_id = nid
+        v = self._variants_data[self._current_variant_idx] if self._variants_data else None
+        node = next((n for n in (v.get("nodes", []) if v else []) if n["id"] == nid), None)
+        if not node:
+            return
+        self._node_label_edit.blockSignals(True)
+        self._node_label_edit.setText(node.get("label", nid))
+        self._node_label_edit.blockSignals(False)
+        self._node_delay_spin.blockSignals(True)
+        self._node_delay_spin.setValue(float(node.get("delay", 0)))
+        self._node_delay_spin.blockSignals(False)
+        self._slots_data = node.setdefault("slots", [])
+        self._current_deploy_row = -1
+        self._refresh_slot_list()
+        self._slot_editor.setVisible(False)
+        self._node_props_panel.setVisible(True)
+        self._graph_canvas.highlight_node(nid)
+
+    def _on_node_label_changed(self, text):
+        if not self._current_node_id or not self._variants_data:
+            return
+        v = self._variants_data[self._current_variant_idx]
+        node = next((n for n in v.get("nodes", []) if n["id"] == self._current_node_id), None)
+        if node:
+            node["label"] = text
+            self._graph_canvas.update_node_label(self._current_node_id, text)
+
+    def _on_node_delay_changed(self, val):
+        if not self._current_node_id or not self._variants_data:
+            return
+        v = self._variants_data[self._current_variant_idx]
+        node = next((n for n in v.get("nodes", []) if n["id"] == self._current_node_id), None)
+        if node:
+            node["delay"] = val
+
+    def _graph_add_node(self):
+        if not self._variants_data:
+            return
+        v = self._variants_data[self._current_variant_idx]
+        nodes = v.setdefault("nodes", [])
+        existing_ids = {n["id"] for n in nodes}
+        idx = len(nodes)
+        nid = f"n{idx}"
+        while nid in existing_ids:
+            idx += 1
+            nid = f"n{idx}"
+        nodes.append({"id": nid, "label": f"Node {len(nodes) + 1}", "after": [], "delay": 0, "slots": []})
+        self._refresh_graph()
+
+    def _graph_del_node(self):
+        if not self._current_node_id or not self._variants_data:
+            return
+        v = self._variants_data[self._current_variant_idx]
+        nid = self._current_node_id
+        v["nodes"] = [n for n in v.get("nodes", []) if n["id"] != nid]
+        for n in v["nodes"]:
+            n["after"] = [d for d in n.get("after", []) if d != nid]
+        self._current_node_id = None
+        self._current_deploy_row = -1
+        self._slots_data = []
+        self._refresh_graph()
+
+    def _graph_link(self):
+        if not self._current_node_id or not self._variants_data:
+            QMessageBox.information(self, "Link", "Select a node first (the dependent node that runs AFTER its dependency).")
+            return
+        v = self._variants_data[self._current_variant_idx]
+        nodes = v.get("nodes", [])
+        node = next((n for n in nodes if n["id"] == self._current_node_id), None)
+        if not node:
+            return
+        candidates = [n for n in nodes if n["id"] != self._current_node_id and n["id"] not in node.get("after", [])]
+        if not candidates:
+            QMessageBox.information(self, "Link", "No other nodes available to add as dependency.")
+            return
+        options = [f"{n.get('label', n['id'])} ({n['id']})" for n in candidates]
+        item, ok = QInputDialog.getItem(
+            self, "Add Dependency",
+            f"'{node.get('label', node['id'])}' runs AFTER:",
+            options, 0, False,
+        )
+        if not ok:
+            return
+        dep_id = candidates[options.index(item)]["id"]
+        node.setdefault("after", []).append(dep_id)
+        self._refresh_graph(keep_selected=self._current_node_id)
+
+    def _graph_unlink(self):
+        if not self._current_node_id or not self._variants_data:
+            return
+        v = self._variants_data[self._current_variant_idx]
+        node = next((n for n in v.get("nodes", []) if n["id"] == self._current_node_id), None)
+        if not node or not node.get("after"):
+            QMessageBox.information(self, "Unlink", "This node has no dependencies to remove.")
+            return
+        nodes_map = {n["id"]: n for n in v.get("nodes", [])}
+        options = [f"{nodes_map.get(nid, {}).get('label', nid)} ({nid})" for nid in node["after"]]
+        item, ok = QInputDialog.getItem(
+            self, "Remove Dependency",
+            f"Remove which dependency from '{node.get('label', node['id'])}'?",
+            options, 0, False,
+        )
+        if not ok:
+            return
+        node["after"].pop(options.index(item))
+        self._refresh_graph(keep_selected=self._current_node_id)
+
+    def _refresh_variant_list(self):
+        self._variant_list.blockSignals(True)
+        self._variant_list.clear()
+        for v in self._variants_data:
+            self._variant_list.addItem(f"{v.get('name', '?')}  ×{v.get('weight', 1)}")
+        self._variant_list.setCurrentRow(self._current_variant_idx)
+        self._variant_weight.blockSignals(True)
+        if self._variants_data:
+            self._variant_weight.setValue(self._variants_data[self._current_variant_idx].get("weight", 1))
+        self._variant_weight.blockSignals(False)
+        self._variant_list.blockSignals(False)
+
+    def _on_variant_changed(self, idx):
+        if idx < 0 or idx == self._current_variant_idx or not self._variants_data:
+            return
+        if self._current_node_id and 0 <= self._current_deploy_row < len(self._slots_data):
+            self._collect_slot(self._current_deploy_row)
+        self._current_variant_idx = idx
+        self._current_node_id = None
+        self._current_deploy_row = -1
+        self._slots_data = []
+        self._variant_weight.blockSignals(True)
+        self._variant_weight.setValue(self._variants_data[idx].get("weight", 1))
+        self._variant_weight.blockSignals(False)
+        self._refresh_graph()
+
+    def _on_variant_weight_changed(self, val):
+        if self._variants_data:
+            self._variants_data[self._current_variant_idx]["weight"] = val
+
+    def _variant_add(self):
+        if self._current_node_id and 0 <= self._current_deploy_row < len(self._slots_data):
+            self._collect_slot(self._current_deploy_row)
+        n = len(self._variants_data) + 1
+        default_node = {"id": "n0", "label": "Deploy", "after": [], "delay": 0, "slots": []}
+        self._variants_data.append({"name": f"Variant {n}", "weight": 1, "nodes": [default_node]})
+        self._current_variant_idx = len(self._variants_data) - 1
+        self._current_node_id = None
+        self._current_deploy_row = -1
+        self._slots_data = []
+        self._refresh_variant_list()
+        self._refresh_graph()
+
+    def _variant_delete(self):
+        if len(self._variants_data) <= 1:
+            QMessageBox.warning(self, "Cannot Delete", "A scenario must have at least one variant.")
+            return
+        del self._variants_data[self._current_variant_idx]
+        self._current_variant_idx = max(0, self._current_variant_idx - 1)
+        self._current_node_id = None
+        self._current_deploy_row = -1
+        self._slots_data = []
+        self._refresh_variant_list()
+        self._refresh_graph()
+
+    def _variant_rename(self):
+        if not self._variants_data:
+            return
+        cur_name = self._variants_data[self._current_variant_idx].get("name", "")
+        new_name, ok = QInputDialog.getText(self, "Rename Variant", "Variant name:", text=cur_name)
+        if not ok or not new_name.strip() or new_name.strip() == cur_name:
+            return
+        self._variants_data[self._current_variant_idx]["name"] = new_name.strip()
+        self._refresh_variant_list()
+
     def _scenario_save(self):
         if not self._current_scenario:
             QMessageBox.warning(self, "No Scenario", "Select or create a scenario first.")
             return
-        if 0 <= self._current_deploy_row < len(self._slots_data):
+        if self._current_node_id and 0 <= self._current_deploy_row < len(self._slots_data):
             self._collect_slot(self._current_deploy_row)
-        save_scenario(self._current_scenario, self._slots_data)
+        save_scenario(self._current_scenario, self._variants_data)
         self._refresh_slot_list()
         QMessageBox.information(self, "Saved", f"Scenario '{self._current_scenario}' saved.")
 
@@ -1897,8 +2368,8 @@ def main():
     app.setStyle("Fusion")
     app.setStyleSheet(_DARK_STYLE)
     win = MainWindow()
-    win.show()
     _apply_dark_titlebar(int(win.winId()))
+    win.show()
     sys.exit(app.exec_())
 
 

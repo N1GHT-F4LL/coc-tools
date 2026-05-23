@@ -15,10 +15,10 @@ def load_scenario(name):
         return json.load(f)
 
 
-def save_scenario(name, slots):
+def save_scenario(name, variants):
     os.makedirs(SCENARIOS_DIR, exist_ok=True)
     with open(os.path.join(SCENARIOS_DIR, f"{name}.json"), "w", encoding="utf-8") as f:
-        json.dump({"name": name, "slots": slots}, f, indent=2)
+        json.dump({"name": name, "variants": variants}, f, indent=2)
 
 
 def delete_scenario(name):
@@ -29,5 +29,6 @@ def delete_scenario(name):
 
 def rename_scenario(old, new):
     data = load_scenario(old)
-    save_scenario(new, data["slots"])
+    variants = data.get("variants") or [{"name": "Default", "weight": 1, "slots": data.get("slots", [])}]
+    save_scenario(new, variants)
     delete_scenario(old)
