@@ -9,6 +9,7 @@ except (ImportError, OSError):
 
 import sys
 import os
+import re
 import json
 import logging
 import threading
@@ -24,7 +25,8 @@ from PyQt5.QtWidgets import (
     QComboBox, QListWidget, QTableWidget, QTableWidgetItem,
     QGroupBox, QFormLayout, QSplitter, QScrollArea,
     QHeaderView, QMessageBox, QSizePolicy, QInputDialog,
-    QLineEdit, QCheckBox, QFileDialog,
+    QLineEdit, QCheckBox, QFileDialog, QTreeWidget, QTreeWidgetItem,
+    QStackedWidget, QRadioButton,
 )
 from core.scenario import list_scenarios, load_scenario, save_scenario, delete_scenario, rename_scenario
 from PyQt5.QtCore import Qt, QThread, QRunnable, QThreadPool, QObject, pyqtSignal
@@ -33,6 +35,27 @@ from PyQt5.QtGui import QPixmap, QImage, QFont, QTextCursor
 # gui.py lives in coc_bot/ — same sys.path as main.py
 SETTINGS_PATH = os.path.join(os.path.dirname(__file__), "settings.json")
 ASSETS_PATH   = os.path.join(os.path.dirname(__file__), "assets")
+
+_CAT_TO_FOLDER = {
+    "Troops":                 "units/troops",
+    "Super Troops":           "units/super_troops",
+    "Heroes":                 "units/heroes",
+    "Spells":                 "units/spells",
+    "Siege":                  "units/siege",
+    "Clan Capital / Troops":  "units/clan_capital/troops",
+    "Clan Capital / Spells":  "units/clan_capital/spells",
+    "Buildings / Defenses":   "buildings/defenses",
+    "Buildings / Collectors": "buildings/resource_collectors",
+    "Buildings / Storages":   "buildings/storages",
+    "Buildings / Utility":    "buildings/utility",
+    "Buildings / Walls":      "buildings/walls",
+    "Buttons / Attack":       "buttons/attack",
+    "Buttons / Battle":       "buttons/battle",
+    "Buttons / Home":         "buttons/home",
+    "Buttons / Popup":        "buttons/popup",
+    "Icons / Resources":      "icons/resources",
+    "Icons / Status":         "icons/status",
+}
 
 
 # ---------------------------------------------------------------------------
@@ -145,18 +168,25 @@ class ScreenshotWorker(QRunnable):
 
 
 # ---------------------------------------------------------------------------
-# Clickable image label with point-overlay for macro recorder
+# Unified device-view widget — handles both click-to-record and rubber-band crop
 # ---------------------------------------------------------------------------
 
-class ClickableImageLabel(QLabel):
-    point_added = pyqtSignal(int, int)  # original device (x, y)
+class DeviceView(QLabel):
+    point_added     = pyqtSignal(int, int)            # mode "points"
+    region_selected = pyqtSignal(int, int, int, int)  # mode "crop"
+
+    MODE_POINTS = "points"
+    MODE_CROP   = "crop"
 
     def __init__(self):
         super().__init__()
         self._orig_frame = None
-        self._markers = []      # [(orig_x, orig_y), ...]
-        self._scale_x = 1.0
-        self._scale_y = 1.0
+        self._mode       = self.MODE_POINTS
+        self._markers    = []         # [(x, y)] — points mode
+        self._drag_start = None       # (x, y)   — crop mode
+        self._drag_end   = None       # (x, y)
+        self._scale_x    = 1.0
+        self._scale_y    = 1.0
         self.setAlignment(Qt.AlignTop | Qt.AlignLeft)
         self.setCursor(Qt.CrossCursor)
         self.setMinimumSize(480, 270)
@@ -164,11 +194,22 @@ class ClickableImageLabel(QLabel):
         self.setStyleSheet("background:#11111b; border:1px solid #313244; border-radius:6px;")
         self.setText("No screenshot yet.\nClick 'Capture Screenshot' to begin.")
 
-    # --- public API ---
+    # ── public API ──────────────────────────────────────────────────────
 
     def set_frame(self, bgr_array):
         self._orig_frame = bgr_array.copy()
         self._markers.clear()
+        self._drag_start = None
+        self._drag_end   = None
+        self._redraw()
+
+    def set_mode(self, mode):
+        self._mode = mode
+        if mode == self.MODE_POINTS:
+            self._drag_start = None
+            self._drag_end   = None
+        else:
+            self._markers.clear()
         self._redraw()
 
     def add_marker(self, ox, oy):
@@ -184,16 +225,75 @@ class ClickableImageLabel(QLabel):
         self._markers.clear()
         self._redraw()
 
-    # --- internal ---
+    def get_crop(self, x1, y1, x2, y2):
+        if self._orig_frame is None:
+            return None
+        h, w = self._orig_frame.shape[:2]
+        x1, x2 = sorted((max(0, x1), min(w, x2)))
+        y1, y2 = sorted((max(0, y1), min(h, y2)))
+        if x2 <= x1 or y2 <= y1:
+            return None
+        return self._orig_frame[y1:y2, x1:x2].copy()
+
+    # ── internal ────────────────────────────────────────────────────────
+
+    def _orig_coords(self, event):
+        ox = int(event.x() / self._scale_x)
+        oy = int(event.y() / self._scale_y)
+        if self._orig_frame is not None:
+            h, w = self._orig_frame.shape[:2]
+            ox = max(0, min(w - 1, ox))
+            oy = max(0, min(h - 1, oy))
+        return ox, oy
+
+    def mousePressEvent(self, event):
+        if self._orig_frame is not None and event.button() == Qt.LeftButton:
+            ox, oy = self._orig_coords(event)
+            if self._mode == self.MODE_POINTS:
+                self.add_marker(ox, oy)
+                self.point_added.emit(ox, oy)
+            else:
+                self._drag_start = (ox, oy)
+                self._drag_end   = (ox, oy)
+                self._redraw()
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        if self._mode == self.MODE_CROP and self._drag_start is not None:
+            self._drag_end = self._orig_coords(event)
+            self._redraw()
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        if (self._mode == self.MODE_CROP and
+                self._drag_start is not None and
+                event.button() == Qt.LeftButton):
+            self._drag_end = self._orig_coords(event)
+            self._redraw()
+            x1 = min(self._drag_start[0], self._drag_end[0])
+            y1 = min(self._drag_start[1], self._drag_end[1])
+            x2 = max(self._drag_start[0], self._drag_end[0])
+            y2 = max(self._drag_start[1], self._drag_end[1])
+            if x2 > x1 and y2 > y1:
+                self.region_selected.emit(x1, y1, x2, y2)
+        super().mouseReleaseEvent(event)
 
     def _redraw(self):
         if self._orig_frame is None:
             return
         frame = self._orig_frame.copy()
-        for i, (ox, oy) in enumerate(self._markers):
-            cv2.circle(frame, (ox, oy), 10, (0, 0, 255), 2)
-            cv2.putText(frame, str(i + 1), (ox + 12, oy - 6),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 80, 255), 1, cv2.LINE_AA)
+        if self._mode == self.MODE_POINTS:
+            for i, (ox, oy) in enumerate(self._markers):
+                cv2.circle(frame, (ox, oy), 10, (0, 0, 255), 2)
+                cv2.putText(frame, str(i + 1), (ox + 12, oy - 6),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 80, 255), 1, cv2.LINE_AA)
+        else:
+            if self._drag_start and self._drag_end:
+                x1 = min(self._drag_start[0], self._drag_end[0])
+                y1 = min(self._drag_start[1], self._drag_end[1])
+                x2 = max(self._drag_start[0], self._drag_end[0])
+                y2 = max(self._drag_start[1], self._drag_end[1])
+                cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 200, 255), 2)
         h, w = frame.shape[:2]
         avail_w = max(self.width(), 480)
         avail_h = max(self.height(), 270)
@@ -205,17 +305,6 @@ class ClickableImageLabel(QLabel):
         resized = cv2.resize(rgb, (dw, dh), interpolation=cv2.INTER_AREA)
         qi = QImage(resized.data, dw, dh, dw * 3, QImage.Format_RGB888)
         self.setPixmap(QPixmap.fromImage(qi))
-
-    def mousePressEvent(self, event):
-        if self._orig_frame is not None:
-            ox = int(event.x() / self._scale_x)
-            oy = int(event.y() / self._scale_y)
-            h, w = self._orig_frame.shape[:2]
-            ox = max(0, min(w - 1, ox))
-            oy = max(0, min(h - 1, oy))
-            self.add_marker(ox, oy)
-            self.point_added.emit(ox, oy)
-        super().mousePressEvent(event)
 
     def resizeEvent(self, event):
         self._redraw()
@@ -410,7 +499,7 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("CoC Bot")
         self.resize(1200, 780)
         self._bot_thread = None
-        self._macro_points = []
+        self._studio_points = []
         self._slots_data = []
         self._current_deploy_row = -1
         self._current_scenario = None
@@ -419,7 +508,7 @@ class MainWindow(QMainWindow):
         tabs.addTab(self._build_control_tab(),    "Control")
         tabs.addTab(self._build_attack_tab(),     "Attack")
         tabs.addTab(self._build_scenarios_tab(),  "Troops")
-        tabs.addTab(self._build_macro_tab(),      "Recorder")
+        tabs.addTab(self._build_studio_tab(),     "Studio")
         tabs.addTab(self._build_device_tab(),     "Device")
         self.setCentralWidget(tabs)
 
@@ -435,7 +524,7 @@ class MainWindow(QMainWindow):
         "Heroes":       ("units/heroes/*.png",),
         "Spells":       ("units/spells/*.png",),
         "Siege":        ("units/siege/*.png",),
-        "Clan Capital": ("clan_capital/**/*.png",),
+        "Clan Capital": ("units/clan_capital/**/*.png",),
     }
     _FOLDER_TO_CAT = {
         "troops":       "Troops",
@@ -443,6 +532,7 @@ class MainWindow(QMainWindow):
         "heroes":       "Heroes",
         "spells":       "Spells",
         "siege":        "Siege",
+        "clan_capital": "Clan Capital",
     }
 
     def _build_control_tab(self):
@@ -582,6 +672,383 @@ class MainWindow(QMainWindow):
         "mumu":             "127.0.0.1:7555",
         "android_emulator": "127.0.0.1:5554",
     }
+
+    # -----------------------------------------------------------------------
+    # Studio tab — unified Recorder + Assets
+    # -----------------------------------------------------------------------
+
+    def _build_studio_tab(self):
+        w = QWidget()
+        root = QVBoxLayout(w)
+        root.setContentsMargins(8, 8, 8, 8)
+        root.setSpacing(8)
+
+        # ── Top bar ──────────────────────────────────────────────────────────
+        top = QHBoxLayout()
+        self._s_btn_cap = QPushButton("Capture Screenshot")
+        self._s_btn_cap.setObjectName("btn_primary")
+        self._s_res_lbl = QLabel("No screenshot captured.")
+        self._s_res_lbl.setStyleSheet("color:#a6adc8;")
+        self._s_mode_rec  = QRadioButton("Record Taps")
+        self._s_mode_crop = QRadioButton("Add Asset")
+        self._s_mode_rec.setChecked(True)
+        top.addWidget(self._s_btn_cap)
+        top.addWidget(self._s_res_lbl, 1)
+        top.addWidget(self._s_mode_rec)
+        top.addWidget(self._s_mode_crop)
+        root.addLayout(top)
+
+        # ── Main splitter ─────────────────────────────────────────────────────
+        splitter = QSplitter(Qt.Horizontal)
+
+        self._studio_view = DeviceView()
+        splitter.addWidget(self._studio_view)
+
+        self._s_stack = QStackedWidget()
+        self._s_stack.setMinimumWidth(270)
+        self._s_stack.setMaximumWidth(340)
+        self._s_stack.addWidget(self._build_studio_record_panel())
+        self._s_stack.addWidget(self._build_studio_crop_panel())
+        splitter.addWidget(self._s_stack)
+        splitter.setSizes([900, 300])
+
+        root.addWidget(splitter, 1)
+
+        # ── Wire ──────────────────────────────────────────────────────────────
+        self._s_btn_cap.clicked.connect(self._studio_capture)
+        self._studio_view.point_added.connect(self._studio_on_click)
+        self._studio_view.region_selected.connect(self._studio_on_region)
+        self._s_mode_rec.toggled.connect(self._studio_mode_changed)
+
+        self._fill_template_combo(self._s_tmpl_cb, "Troops")
+        self._s_cat_cb.currentTextChanged.connect(
+            lambda c: self._on_cat_changed(c, self._s_tmpl_cb, self._s_thumb))
+        self._s_tmpl_cb.currentIndexChanged.connect(
+            lambda: self._update_thumb(self._s_tmpl_cb, self._s_thumb))
+        self._s_asset_cat_cb.addItems(sorted(_CAT_TO_FOLDER.keys()))
+        self._s_asset_cat_cb.setCurrentText("Troops")
+        self._s_asset_name_le.textChanged.connect(self._studio_name_changed)
+        self._s_asset_cat_cb.currentTextChanged.connect(self._studio_update_key_label)
+        self._assets_populate_tree()
+        return w
+
+    def _build_studio_record_panel(self):
+        w = QWidget()
+        rv = QVBoxLayout(w)
+        rv.setContentsMargins(8, 8, 8, 8)
+        rv.setSpacing(6)
+
+        form = QFormLayout()
+        form.setSpacing(8)
+        form.setLabelAlignment(Qt.AlignRight)
+
+        self._s_cat_cb = QComboBox()
+        self._s_cat_cb.addItems(list(self._CAT_PATTERNS))
+        form.addRow("Unit Type", self._s_cat_cb)
+
+        self._s_tmpl_cb = QComboBox()
+        self._s_thumb = QLabel()
+        self._s_thumb.setFixedSize(48, 48)
+        self._s_thumb.setStyleSheet(
+            "border:1px solid #313244; background:#181825; border-radius:4px;")
+        tmpl_row = QWidget(); tmpl_row.setStyleSheet("background: transparent;")
+        tmpl_h = QHBoxLayout(tmpl_row)
+        tmpl_h.setContentsMargins(0, 0, 0, 0)
+        tmpl_h.setSpacing(6)
+        tmpl_h.addWidget(self._s_tmpl_cb)
+        tmpl_h.addWidget(self._s_thumb)
+        form.addRow("Troop", tmpl_row)
+
+        self._s_taps = QSpinBox()
+        self._s_taps.setRange(1, 200)
+        self._s_taps.setValue(1)
+        form.addRow("Taps", self._s_taps)
+        rv.addLayout(form)
+
+        sep = QLabel("Recorded Points")
+        sep.setStyleSheet("color:#a6adc8; font-weight:600; margin-top:8px;")
+        rv.addWidget(sep)
+
+        self._s_pts_list = QListWidget()
+        rv.addWidget(self._s_pts_list, 1)
+
+        btn_row1 = QHBoxLayout()
+        btn_rm_last = QPushButton("Remove Last")
+        btn_clear   = QPushButton("Clear All")
+        btn_row1.addWidget(btn_rm_last)
+        btn_row1.addWidget(btn_clear)
+        rv.addLayout(btn_row1)
+
+        btn_row2 = QHBoxLayout()
+        btn_save_pts  = QPushButton("Save as Points")
+        btn_save_line = QPushButton("Save as Line")
+        btn_row2.addWidget(btn_save_pts)
+        btn_row2.addWidget(btn_save_line)
+        rv.addLayout(btn_row2)
+
+        btn_rm_last.clicked.connect(self._studio_rm_last)
+        btn_clear.clicked.connect(self._studio_clear)
+        btn_save_pts.clicked.connect(self._studio_save_slot)
+        btn_save_line.clicked.connect(self._studio_save_line)
+        return w
+
+    def _build_studio_crop_panel(self):
+        w = QWidget()
+        rv = QVBoxLayout(w)
+        rv.setContentsMargins(8, 8, 8, 8)
+        rv.setSpacing(6)
+
+        preview_row = QHBoxLayout()
+        preview_lbl = QLabel("Crop Preview:")
+        preview_lbl.setStyleSheet("color:#a6adc8;")
+        self._s_crop_preview = QLabel()
+        self._s_crop_preview.setFixedSize(96, 96)
+        self._s_crop_preview.setAlignment(Qt.AlignCenter)
+        self._s_crop_preview.setStyleSheet(
+            "background:#181825; border:1px solid #313244; border-radius:4px;")
+        preview_row.addWidget(preview_lbl)
+        preview_row.addWidget(self._s_crop_preview)
+        preview_row.addStretch()
+        rv.addLayout(preview_row)
+
+        form = QFormLayout()
+        form.setSpacing(8)
+        form.setLabelAlignment(Qt.AlignRight)
+
+        self._s_asset_cat_cb = QComboBox()
+        form.addRow("Category", self._s_asset_cat_cb)
+
+        self._s_asset_name_le = QLineEdit()
+        self._s_asset_name_le.setPlaceholderText("e.g. wizard")
+        form.addRow("Name", self._s_asset_name_le)
+
+        self._s_asset_key_lbl = QLabel("—")
+        self._s_asset_key_lbl.setStyleSheet("color:#a6adc8; font-size:9pt;")
+        form.addRow("Key", self._s_asset_key_lbl)
+        rv.addLayout(form)
+
+        self._s_btn_save_asset = QPushButton("Save Asset")
+        self._s_btn_save_asset.setObjectName("btn_primary")
+        self._s_btn_save_asset.setEnabled(False)
+        rv.addWidget(self._s_btn_save_asset)
+
+        sep = QLabel("Asset Library")
+        sep.setStyleSheet("color:#a6adc8; font-weight:600; margin-top:8px;")
+        rv.addWidget(sep)
+
+        self._assets_tree = QTreeWidget()
+        self._assets_tree.setHeaderLabel("Asset")
+        self._assets_tree.setRootIsDecorated(True)
+        self._assets_tree.setUniformRowHeights(True)
+        rv.addWidget(self._assets_tree, 1)
+
+        btn_del = QPushButton("Delete Selected")
+        btn_del.clicked.connect(self._assets_delete)
+        rv.addWidget(btn_del)
+
+        self._s_crop_bgr = None
+        self._s_btn_save_asset.clicked.connect(self._studio_save_asset)
+        return w
+
+    def _assets_populate_tree(self):
+        self._assets_tree.clear()
+        base = Path(ASSETS_PATH)
+        groups = {}
+        for p in sorted(base.rglob("*.png")):
+            folder = p.parent.relative_to(base).as_posix()
+            groups.setdefault(folder, []).append(p)
+
+        for folder in sorted(groups):
+            top = QTreeWidgetItem([folder])
+            top.setFlags(top.flags() & ~Qt.ItemIsSelectable)
+            for p in groups[folder]:
+                rel = p.relative_to(base).with_suffix("").as_posix()
+                child = QTreeWidgetItem([p.stem])
+                child.setData(0, Qt.UserRole, rel)
+                top.addChild(child)
+            self._assets_tree.addTopLevelItem(top)
+            top.setExpanded(True)
+
+    def _assets_delete(self):
+        items = self._assets_tree.selectedItems()
+        if not items:
+            return
+        item = items[0]
+        rel = item.data(0, Qt.UserRole)
+        if not rel:
+            return
+        path = Path(ASSETS_PATH) / (rel + ".png")
+        ans = QMessageBox.question(
+            self, "Xác nhận xóa",
+            f"Xóa asset '{rel}'?\nFile sẽ bị xóa khỏi disk.",
+            QMessageBox.Yes | QMessageBox.No,
+        )
+        if ans != QMessageBox.Yes:
+            return
+        try:
+            path.unlink()
+        except OSError as e:
+            QMessageBox.warning(self, "Lỗi", str(e))
+            return
+        from core.vision import vision as _vision
+        _vision.cache.clear()
+        _vision.load_assets(ASSETS_PATH)
+        self._assets_populate_tree()
+        self._assets_refresh_combos()
+
+    def _assets_refresh_combos(self):
+        self._fill_template_combo(self._d_tmpl_cb, self._d_cat_cb.currentText())
+        self._fill_template_combo(self._s_tmpl_cb, self._s_cat_cb.currentText())
+
+    # -----------------------------------------------------------------------
+    # Studio handlers
+    # -----------------------------------------------------------------------
+
+    def _studio_capture(self):
+        self._s_res_lbl.setText("Connecting to device…")
+        worker = ScreenshotWorker(load_settings())
+        worker.signals.done.connect(self._studio_on_frame)
+        worker.signals.error.connect(self._studio_on_error)
+        QThreadPool.globalInstance().start(worker)
+
+    def _studio_on_frame(self, frame):
+        h, w = frame.shape[:2]
+        self._s_res_lbl.setText(f"Resolution: {w}×{h}")
+        self._studio_view.set_frame(frame)
+
+    def _studio_on_error(self, msg):
+        self._s_res_lbl.setText(f"Error: {msg}")
+        QMessageBox.warning(self, "Screenshot Error", msg)
+
+    def _studio_mode_changed(self, rec_checked):
+        if rec_checked:
+            self._studio_view.set_mode(DeviceView.MODE_POINTS)
+            self._s_stack.setCurrentIndex(0)
+        else:
+            self._studio_view.set_mode(DeviceView.MODE_CROP)
+            self._s_stack.setCurrentIndex(1)
+
+    def _studio_on_click(self, x, y):
+        self._studio_points.append((x, y))
+        idx = len(self._studio_points)
+        self._s_pts_list.addItem(f"{idx}.  ({x}, {y})")
+        self._s_taps.setValue(idx)
+
+    def _studio_rm_last(self):
+        if self._studio_points:
+            self._studio_points.pop()
+            self._s_pts_list.takeItem(self._s_pts_list.count() - 1)
+            self._studio_view.remove_last_marker()
+            self._s_taps.setValue(max(1, len(self._studio_points)))
+
+    def _studio_clear(self):
+        self._studio_points.clear()
+        self._s_pts_list.clear()
+        self._studio_view.clear_markers()
+        self._s_taps.setValue(1)
+
+    def _studio_save_slot(self):
+        if not self._studio_points:
+            QMessageBox.warning(self, "No Points",
+                                "Record at least one tap point before saving.")
+            return
+        if not self._current_scenario:
+            QMessageBox.warning(self, "No Scenario",
+                                "Select or create a scenario in the Troops tab first.")
+            return
+        rel  = self._s_tmpl_cb.currentData() or ""
+        taps = self._s_taps.value()
+        slot = {
+            "template": rel, "taps": taps, "strategy": "points",
+            "points": [[x, y] for x, y in self._studio_points],
+        }
+        self._slots_data.append(slot)
+        save_scenario(self._current_scenario, self._slots_data)
+        self._refresh_slot_list()
+        name = rel.split("/")[-1] if "/" in rel else rel
+        QMessageBox.information(self, "Added",
+                                f"Slot '{name}' added to '{self._current_scenario}'.")
+
+    def _studio_save_line(self):
+        if len(self._studio_points) < 2:
+            QMessageBox.warning(self, "Need 2 Points",
+                                "Record exactly 2 points (start and end of the line).")
+            return
+        if not self._current_scenario:
+            QMessageBox.warning(self, "No Scenario",
+                                "Select or create a scenario in the Troops tab first.")
+            return
+        rel  = self._s_tmpl_cb.currentData() or ""
+        taps = self._s_taps.value()
+        x1, y1 = self._studio_points[0]
+        x2, y2 = self._studio_points[-1]
+        slot = {
+            "template": rel, "taps": taps, "strategy": "line",
+            "x1": x1, "y1": y1, "x2": x2, "y2": y2,
+        }
+        self._slots_data.append(slot)
+        save_scenario(self._current_scenario, self._slots_data)
+        self._refresh_slot_list()
+        name = rel.split("/")[-1] if "/" in rel else rel
+        QMessageBox.information(self, "Added",
+                                f"Line slot '{name}' ({x1},{y1})→({x2},{y2}) added.")
+
+    def _studio_on_region(self, x1, y1, x2, y2):
+        crop = self._studio_view.get_crop(x1, y1, x2, y2)
+        if crop is None:
+            return
+        self._s_crop_bgr = crop
+        h, w = crop.shape[:2]
+        scale = min(96 / w, 96 / h, 4.0)
+        dw, dh = max(1, int(w * scale)), max(1, int(h * scale))
+        rgb = cv2.cvtColor(cv2.resize(crop, (dw, dh), interpolation=cv2.INTER_NEAREST),
+                           cv2.COLOR_BGR2RGB)
+        qi = QImage(rgb.data, dw, dh, dw * 3, QImage.Format_RGB888)
+        self._s_crop_preview.setPixmap(QPixmap.fromImage(qi))
+        self._studio_update_save_btn()
+
+    def _studio_name_changed(self, text):
+        self._studio_update_key_label()
+        self._studio_update_save_btn()
+
+    def _studio_update_key_label(self):
+        cat  = self._s_asset_cat_cb.currentText()
+        name = re.sub(r"[^a-z0-9_]", "_", self._s_asset_name_le.text().strip().lower())
+        if cat and name:
+            folder = _CAT_TO_FOLDER.get(cat, "units/troops")
+            self._s_asset_key_lbl.setText(f"{folder}/{name}")
+        else:
+            self._s_asset_key_lbl.setText("—")
+
+    def _studio_update_save_btn(self):
+        name = self._s_asset_name_le.text().strip()
+        self._s_btn_save_asset.setEnabled(bool(name and self._s_crop_bgr is not None))
+
+    def _studio_save_asset(self):
+        if self._s_crop_bgr is None:
+            return
+        name = re.sub(r"[^a-z0-9_]", "_", self._s_asset_name_le.text().strip().lower())
+        if not name:
+            QMessageBox.warning(self, "No Name", "Enter an asset name before saving.")
+            return
+        cat    = self._s_asset_cat_cb.currentText()
+        folder = _CAT_TO_FOLDER.get(cat, "units/troops")
+        dest   = Path(ASSETS_PATH) / folder / f"{name}.png"
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        if not cv2.imwrite(str(dest), self._s_crop_bgr):
+            QMessageBox.critical(self, "Lỗi", f"Không thể ghi file:\n{dest}")
+            return
+        from core.vision import vision as _vision
+        rel_key = dest.relative_to(Path(ASSETS_PATH)).with_suffix("").as_posix()
+        _vision.cache[name]    = self._s_crop_bgr
+        _vision.cache[rel_key] = self._s_crop_bgr
+        self._assets_populate_tree()
+        self._assets_refresh_combos()
+        self._s_crop_bgr = None
+        self._s_crop_preview.clear()
+        self._s_asset_name_le.clear()
+        self._s_btn_save_asset.setEnabled(False)
+        self._s_res_lbl.setText(f"Asset '{name}' saved to {folder}/")
 
     def _build_device_tab(self):
         w = QWidget()
@@ -1019,16 +1486,16 @@ class MainWindow(QMainWindow):
 
         self._d_cat_cb = QComboBox()
         self._d_cat_cb.addItems(list(self._CAT_PATTERNS))
-        form.addRow("Category", self._d_cat_cb)
+        form.addRow("Unit Type", self._d_cat_cb)
 
         self._d_tmpl_cb  = QComboBox()
         self._d_thumb    = QLabel()
         self._d_thumb.setFixedSize(48, 48)
         self._d_thumb.setStyleSheet("border:1px solid #313244; background:#181825; border-radius:4px;")
-        tmpl_h = QHBoxLayout()
-        tmpl_h.addWidget(self._d_tmpl_cb)
-        tmpl_h.addWidget(self._d_thumb)
-        form.addRow("Template", tmpl_h)
+        _tmpl_row = QWidget(); _tmpl_row.setStyleSheet("background: transparent;")
+        _tmpl_h = QHBoxLayout(_tmpl_row); _tmpl_h.setContentsMargins(0, 0, 0, 0); _tmpl_h.setSpacing(6)
+        _tmpl_h.addWidget(self._d_tmpl_cb); _tmpl_h.addWidget(self._d_thumb)
+        form.addRow("Troop", _tmpl_row)
 
         self._d_taps = QSpinBox(); self._d_taps.setRange(1, 200)
         form.addRow("Taps", self._d_taps)
@@ -1212,7 +1679,7 @@ class MainWindow(QMainWindow):
         for pattern in self._CAT_PATTERNS.get(category, ("units/**/*.png",)):
             for p in sorted(assets.glob(pattern)):
                 rel = p.relative_to(assets).with_suffix("").as_posix()
-                combo.addItem(p.stem, rel)
+                combo.addItem(p.stem.replace("_", " ").title(), rel)
 
     def _on_cat_changed(self, cat, combo, thumb):
         self._fill_template_combo(combo, cat)
@@ -1220,8 +1687,6 @@ class MainWindow(QMainWindow):
 
     def _cat_from_rel(self, rel):
         parts = rel.split("/")
-        if parts and parts[0] == "clan_capital":
-            return "Clan Capital"
         if len(parts) >= 2:
             return self._FOLDER_TO_CAT.get(parts[1], "Troops")
         return "Troops"
@@ -1404,182 +1869,6 @@ class MainWindow(QMainWindow):
         self._refresh_slot_list()
         QMessageBox.information(self, "Saved", f"Scenario '{self._current_scenario}' saved.")
 
-    # -----------------------------------------------------------------------
-    # Tab 4 — Macro Recorder
-    # -----------------------------------------------------------------------
-
-    def _build_macro_tab(self):
-        w = QWidget()
-        v = QVBoxLayout(w)
-        v.setContentsMargins(0, 0, 0, 0)
-
-        # Splitter: image | controls
-        splitter = QSplitter(Qt.Horizontal)
-
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        self._m_img = ClickableImageLabel()
-        self._m_img.point_added.connect(self._macro_on_click)
-        scroll.setWidget(self._m_img)
-        splitter.addWidget(scroll)
-
-        # Right controls
-        right = QWidget()
-        right.setMinimumWidth(230)
-        right.setMaximumWidth(290)
-        rv = QVBoxLayout(right)
-
-        btn_cap = QPushButton("Capture Screenshot")
-        btn_cap.setObjectName("btn_primary")
-        self._m_res_lbl = QLabel("No screenshot captured")
-        rv.addWidget(btn_cap)
-        rv.addWidget(self._m_res_lbl)
-        rv.addSpacing(6)
-
-        rv.addWidget(QLabel("Recorded Points"))
-        self._m_pts_list = QListWidget()
-        rv.addWidget(self._m_pts_list)
-
-        btn_rm_last = QPushButton("Remove Last")
-        btn_clear   = QPushButton("Clear All")
-        rv.addWidget(btn_rm_last)
-        rv.addWidget(btn_clear)
-
-        rv.addSpacing(12)
-        rv.addWidget(QLabel("Save as Slot"))
-        form = QFormLayout()
-
-        self._m_cat_cb = QComboBox()
-        self._m_cat_cb.addItems(list(self._CAT_PATTERNS))
-        form.addRow("Category", self._m_cat_cb)
-
-        self._m_tmpl_cb = QComboBox()
-        self._m_thumb   = QLabel()
-        self._m_thumb.setFixedSize(48, 48)
-        self._m_thumb.setStyleSheet("border:1px solid #313244; background:#181825; border-radius:4px;")
-        tmpl_h = QHBoxLayout()
-        tmpl_h.addWidget(self._m_tmpl_cb)
-        tmpl_h.addWidget(self._m_thumb)
-        form.addRow("Template", tmpl_h)
-
-        self._m_taps = QSpinBox()
-        self._m_taps.setRange(1, 200)
-        self._m_taps.setValue(1)
-        form.addRow("Taps", self._m_taps)
-        rv.addLayout(form)
-
-        btn_add_pts  = QPushButton("Save as Points")
-        btn_add_line = QPushButton("Save as Line")
-        rv.addWidget(btn_add_pts)
-        rv.addWidget(btn_add_line)
-        rv.addStretch()
-
-        splitter.addWidget(right)
-        splitter.setSizes([820, 280])
-        v.addWidget(splitter)
-
-        # Wire
-        self._fill_template_combo(self._m_tmpl_cb, "Troops")
-        self._m_cat_cb.currentTextChanged.connect(
-            lambda cat: self._on_cat_changed(cat, self._m_tmpl_cb, self._m_thumb))
-        self._m_tmpl_cb.currentIndexChanged.connect(
-            lambda: self._update_thumb(self._m_tmpl_cb, self._m_thumb))
-        btn_cap.clicked.connect(self._macro_capture)
-        btn_rm_last.clicked.connect(self._macro_rm_last)
-        btn_clear.clicked.connect(self._macro_clear)
-        btn_add_pts.clicked.connect(self._macro_save_slot)
-        btn_add_line.clicked.connect(self._macro_save_line)
-        return w
-
-    def _macro_capture(self):
-        self._m_res_lbl.setText("Connecting to device…")
-        s = load_settings()
-        worker = ScreenshotWorker(s)
-        worker.signals.done.connect(self._macro_on_frame)
-        worker.signals.error.connect(self._macro_on_error)
-        QThreadPool.globalInstance().start(worker)
-
-    def _macro_on_frame(self, frame):
-        h, w = frame.shape[:2]
-        self._m_res_lbl.setText(f"Resolution: {w}×{h}  — click to record taps")
-        self._macro_points.clear()
-        self._m_pts_list.clear()
-        self._m_taps.setValue(1)
-        self._m_img.set_frame(frame)
-
-    def _macro_on_error(self, msg):
-        self._m_res_lbl.setText(f"Error: {msg}")
-        QMessageBox.warning(self, "Screenshot Error", msg)
-
-    def _macro_on_click(self, x, y):
-        self._macro_points.append((x, y))
-        idx = len(self._macro_points)
-        self._m_pts_list.addItem(f"{idx}.  ({x}, {y})")
-        self._m_taps.setValue(idx)
-
-    def _macro_rm_last(self):
-        if self._macro_points:
-            self._macro_points.pop()
-            self._m_pts_list.takeItem(self._m_pts_list.count() - 1)
-            self._m_img.remove_last_marker()
-            self._m_taps.setValue(max(1, len(self._macro_points)))
-
-    def _macro_clear(self):
-        self._macro_points.clear()
-        self._m_pts_list.clear()
-        self._m_img.clear_markers()
-        self._m_taps.setValue(1)
-
-    def _macro_save_slot(self):
-        if not self._macro_points:
-            QMessageBox.warning(self, "No Points",
-                                "Record at least one tap point before saving.")
-            return
-        if not self._current_scenario:
-            QMessageBox.warning(self, "No Scenario",
-                                "Select or create a scenario in the Scenarios tab first.")
-            return
-        rel  = self._m_tmpl_cb.currentData() or ""
-        taps = self._m_taps.value()
-        slot = {
-            "template": rel,
-            "taps": taps,
-            "strategy": "points",
-            "points": [[x, y] for x, y in self._macro_points],
-        }
-        self._slots_data.append(slot)
-        save_scenario(self._current_scenario, self._slots_data)
-        self._refresh_slot_list()
-        name = rel.split("/")[-1] if "/" in rel else rel
-        QMessageBox.information(self, "Added",
-                                f"Slot '{name}' added to scenario '{self._current_scenario}'.")
-
-    def _macro_save_line(self):
-        if len(self._macro_points) < 2:
-            QMessageBox.warning(self, "Need 2 Points",
-                                "Record exactly 2 points (start and end of the line).")
-            return
-        if not self._current_scenario:
-            QMessageBox.warning(self, "No Scenario",
-                                "Select or create a scenario in the Scenarios tab first.")
-            return
-        rel  = self._m_tmpl_cb.currentData() or ""
-        taps = self._m_taps.value()
-        x1, y1 = self._macro_points[0]
-        x2, y2 = self._macro_points[-1]
-        slot = {
-            "template": rel,
-            "taps": taps,
-            "strategy": "line",
-            "x1": x1, "y1": y1,
-            "x2": x2, "y2": y2,
-        }
-        self._slots_data.append(slot)
-        save_scenario(self._current_scenario, self._slots_data)
-        self._refresh_slot_list()
-        name = rel.split("/")[-1] if "/" in rel else rel
-        QMessageBox.information(self, "Added",
-                                f"Line slot '{name}' ({x1},{y1})→({x2},{y2}) added.")
 
 
 # ---------------------------------------------------------------------------

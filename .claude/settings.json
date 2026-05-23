@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(Move-Item -Path \"d:\\\\coc-tools\\\\coc_bot\\\\assets\\\\clan_capital\" -Destination \"d:\\\\coc-tools\\\\coc_bot\\\\assets\\\\units\\\\clan_capital\")",
+      "Bash(gh pr *)"
+    ]
+  }
+}

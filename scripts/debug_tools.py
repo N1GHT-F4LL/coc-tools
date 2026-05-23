@@ -1,8 +1,13 @@
 import os
+import sys
 import json
 import cv2
 import logging
+from pathlib import Path
 from datetime import datetime
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "coc_bot"))
+
 from core.device import Device
 from core.vision import vision
 from core.logging_utils import setup_logging
@@ -63,15 +68,13 @@ def list_loaded_assets(filter_keyword=None):
 
 
 if __name__ == "__main__":
-    import sys
-
     setup_logging(logging.INFO)
 
     if len(sys.argv) < 2:
         print("Usage:")
-        print("  python debug_tools.py capture          - Capture current screen")
-        print("  python debug_tools.py assets           - List all loaded assets")
-        print("  python debug_tools.py assets <keyword> - List assets matching keyword (e.g., 'close', 'icon_', 'btn_')")
+        print("  python scripts/debug_tools.py capture          - Capture current screen")
+        print("  python scripts/debug_tools.py assets           - List all loaded assets")
+        print("  python scripts/debug_tools.py assets <keyword> - List assets matching keyword")
         sys.exit(1)
 
     cmd = sys.argv[1].lower()

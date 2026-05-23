@@ -20,10 +20,10 @@ python scripts/requirement_check.py
 python scripts/requirement_check.py --strict-assets   # only when cleaning legacy asset names
 
 # Debug helpers
-python coc_bot/debug_tools.py capture                # save current device screen to coc_bot/logs/debug/
-python coc_bot/debug_tools.py assets                 # list every key in the vision asset cache
-python coc_bot/debug_tools.py assets <keyword>       # filter cache keys (e.g. "btn_", "icon_", "close")
-python coc_bot/capture.py                            # wake → launch CoC → screenshot after 15s
+python scripts/debug_tools.py capture                # save current device screen to coc_bot/logs/debug/
+python scripts/debug_tools.py assets                 # list every key in the vision asset cache
+python scripts/debug_tools.py assets <keyword>       # filter cache keys (e.g. "btn_", "icon_", "close")
+python scripts/capture.py                            # wake → launch CoC → screenshot after 15s
 ```
 
 There is no test suite. "Tests" are the requirement gate plus manual run-through.

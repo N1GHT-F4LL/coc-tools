@@ -143,8 +143,10 @@ class BattleScreen(BaseScreen):
                     logger.debug(f"[DEPLOY] '{template_key}' not in cache, skipping")
                     continue
 
+                default_threshold = 0.40 if "siege" in template_key else 0.50
+                slot_threshold = float(slot.get("threshold", default_threshold))
                 score, scaled, result_map = vision._find_best_scale(
-                    bar_gray, template, threshold=0.50, scales=SLOT_ICON_SCALES,
+                    bar_gray, template, threshold=slot_threshold, scales=SLOT_ICON_SCALES,
                 )
                 if result_map is None or scaled is None:
                     logger.debug(f"[DEPLOY] '{template_key}' not found in bar (score={score:.3f})")
