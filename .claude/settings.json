@@ -2,7 +2,11 @@
   "permissions": {
     "allow": [
       "PowerShell(Move-Item -Path \"d:\\\\coc-tools\\\\coc_bot\\\\assets\\\\clan_capital\" -Destination \"d:\\\\coc-tools\\\\coc_bot\\\\assets\\\\units\\\\clan_capital\")",
-      "Bash(gh pr *)"
+      "Bash(gh pr *)",
+      "PowerShell(Get-ChildItem -Recurse \"d:\\\\coc-tools\\\\coc_bot\\\\assets\" | Where-Object { $_.Name -match \"clan|castle|request|cc|troop\" } | Select-Object FullName, Name | Format-Table -AutoSize)",
+      "PowerShell(python -c \"import ast; ast.parse\\(open\\('coc_bot/gui.py', encoding='utf-8'\\).read\\(\\)\\); print\\('OK'\\)\")",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)"
     ]
   }
 }
