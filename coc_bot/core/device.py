@@ -715,6 +715,11 @@ class Device:
             logger.error("adb binary not found when attempting to capture screen.")
             return None
 
+    def _pixel_to_event(self, px, py, max_x_evt, max_y_evt, sw, sh):
+        ex = max(0, min(max_x_evt, int(px * max_x_evt / sw)))
+        ey = max(0, min(max_y_evt, int(py * max_y_evt / sh)))
+        return ex, ey
+
     def _find_touch_input_device(self):
         """
         Find the multi-touch event device (e.g. /dev/input/event4 on BlueStacks).
@@ -794,11 +799,6 @@ class Device:
         max_x_evt = max_x_evt or sw
         max_y_evt = max_y_evt or sh
 
-        def to_evt(px, py):
-            ex = max(0, min(max_x_evt, int(px * max_x_evt / sw)))
-            ey = max(0, min(max_y_evt, int(py * max_y_evt / sh)))
-            return ex, ey
-
         if direction == 'out':
             start_d, end_d = span_pixels, max(20, span_pixels // 5)
         else:
@@ -818,8 +818,8 @@ class Device:
             for i in range(steps + 1):
                 t = i / max(1, steps)
                 d = int(start_d + (end_d - start_d) * t)
-                x1, y1 = to_evt(cx - d, cy)
-                x2, y2 = to_evt(cx + d, cy)
+                x1, y1 = self._pixel_to_event(cx - d, cy, max_x_evt, max_y_evt, sw, sh)
+                x2, y2 = self._pixel_to_event(cx + d, cy, max_x_evt, max_y_evt, sw, sh)
                 se(EV_ABS, ABS_MT_POSITION_X, x1)
                 se(EV_ABS, ABS_MT_POSITION_Y, y1)
                 se(EV_SYN, SYN_MT_REPORT, 0)
@@ -847,6 +847,40 @@ class Device:
                 time.sleep(0.3)
         return True
 
+    def _curved_swipe(self, path, duration_ms=300):
+        if not self.available or not self.connected:
+            return False
+        event_dev, max_x_evt, max_y_evt = self._find_touch_input_device()
+        if not event_dev:
+            return False
+        size = self.get_screen_size()
+        if not size:
+            return False
+        sw, sh = size
+        max_x_evt = max_x_evt or sw
+        max_y_evt = max_y_evt or sh
+
+        EV_ABS, EV_SYN = 3, 0
+        ABS_MT_POSITION_X, ABS_MT_POSITION_Y = 0x35, 0x36
+        SYN_REPORT, SYN_MT_REPORT = 0, 2
+
+        sleep_per = max(0.016, duration_ms / 1000 / max(1, len(path) - 1))
+        cmds = []
+        def se(t, c, v): cmds.append(f"sendevent {event_dev} {t} {c} {v}")
+
+        for px, py in path:
+            ex, ey = self._pixel_to_event(px, py, max_x_evt, max_y_evt, sw, sh)
+            se(EV_ABS, ABS_MT_POSITION_X, ex)
+            se(EV_ABS, ABS_MT_POSITION_Y, ey)
+            se(EV_SYN, SYN_MT_REPORT, 0)
+            se(EV_SYN, SYN_REPORT, 0)
+            cmds.append(f"sleep {sleep_per:.3f}")
+        se(EV_SYN, SYN_REPORT, 0)
+
+        script = ";".join(cmds)
+        res = self._run_adb(['shell', script])
+        return res is not None and res.returncode == 0
+
     def tap(self, x, y):
         if not self.available or not self.connected:
             logger.debug("tap skipped: no active ADB device.")
@@ -857,16 +891,20 @@ class Device:
             logger.error("adb binary not found when attempting to tap.")
 
     def swipe(self, path):
-        if len(path) >= 2:
-            start = path[0]
-            end = path[-1]
-            if not self.available or not self.connected:
-                logger.debug("swipe skipped: no active ADB device.")
-                return
-            try:
-                self._run_adb(['shell', 'input', 'swipe', str(start[0]), str(start[1]), str(end[0]), str(end[1]), '300'])
-            except FileNotFoundError:
-                logger.error("adb binary not found when attempting to swipe.")
+        if len(path) < 2:
+            return
+        if len(path) > 2 and self._curved_swipe(path):
+            return
+        start, end = path[0], path[-1]
+        if not self.available or not self.connected:
+            logger.debug("swipe skipped: no active ADB device.")
+            return
+        try:
+            self._run_adb(['shell', 'input', 'swipe',
+                           str(start[0]), str(start[1]),
+                           str(end[0]), str(end[1]), '300'])
+        except FileNotFoundError:
+            logger.error("adb binary not found when attempting to swipe.")
 
 def connect_with_profile(device, profile, endpoint=None):
     device.start_adb_server()

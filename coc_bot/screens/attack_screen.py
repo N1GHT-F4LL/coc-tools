@@ -55,6 +55,26 @@ class AttackScreen(BaseScreen):
         )
         return bool(found)
 
+    def _request_clan_troops(self):
+        avail = self.ui_manager.wait_until_appears(
+            "buttons/attack/btn_request_clan_castle_available",
+            timeout=3, silent=True, use_orb_fallback=False,
+        )
+        if avail:
+            logger.info("Requesting clan troops from Clan Castle.")
+            self.ui_manager.click(*avail)
+            self.ui_manager._poll_sleep(1.0)
+            self.close_popups()
+            return
+        unavail = self.ui_manager.wait_until_appears(
+            "buttons/attack/btn_request_clan_castle_unavailable",
+            timeout=2, silent=True, use_orb_fallback=False,
+        )
+        if unavail:
+            logger.info("Clan Castle request on cooldown — skipping.")
+        else:
+            logger.info("Clan Castle appears full — skipping request.")
+
     def run_attack_cycle(self):
         """Full farm attack cycle: find match -> evaluate loot -> attack -> deploy -> return.
 
@@ -91,6 +111,9 @@ class AttackScreen(BaseScreen):
             logger.warning("Find a Match button not found - bailing out of attack cycle.")
             self._bail()
             return
+
+        if self.settings.get("actions", {}).get("request_clan_troops", False):
+            self._request_clan_troops()
 
         self.ui_manager.click(*loc)
         logger.info("Tapped Find a Match.")

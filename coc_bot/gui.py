@@ -575,8 +575,8 @@ class MainWindow(QMainWindow):
         self._act_collect.setChecked(_actions.get("collect_resources", True))
         self._act_farm = QCheckBox("Farm Attack")
         self._act_farm.setChecked(_actions.get("farm_attack", True))
-        _cb_troops = QCheckBox("Clan Troops  (soon)")
-        _cb_troops.setEnabled(False)
+        self._act_troops = QCheckBox("Clan Troops")
+        self._act_troops.setChecked(_actions.get("request_clan_troops", False))
         _cb_games  = QCheckBox("Clan Games  (soon)")
         _cb_games.setEnabled(False)
         _btn_save_act = QPushButton("Save")
@@ -584,7 +584,7 @@ class MainWindow(QMainWindow):
         ah.addWidget(self._act_collect)
         ah.addWidget(self._act_farm)
         ah.addSpacing(8)
-        ah.addWidget(_cb_troops)
+        ah.addWidget(self._act_troops)
         ah.addWidget(_cb_games)
         ah.addStretch()
         ah.addWidget(_btn_save_act)
@@ -656,7 +656,7 @@ class MainWindow(QMainWindow):
         s.setdefault("actions", {})
         s["actions"]["collect_resources"]   = self._act_collect.isChecked()
         s["actions"]["farm_attack"]         = self._act_farm.isChecked()
-        s["actions"]["request_clan_troops"] = False
+        s["actions"]["request_clan_troops"] = self._act_troops.isChecked()
         s["actions"]["clan_games"]          = False
         save_settings(s)
         QMessageBox.information(self, "Saved", "Action settings saved.")

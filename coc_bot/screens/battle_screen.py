@@ -122,25 +122,26 @@ class BattleScreen(BaseScreen):
         for slot in slots:
             if slot.get("strategy") == "delay":
                 seconds = int(slot.get("seconds", 1))
-                logger.info(f"[DEPLOY] Waiting {seconds}s")
+                logger.info(f"[DEPLOY] delay  {seconds}s")
                 self.ui_manager._poll_sleep(seconds)
                 any_deployed = True
                 continue
 
             template_key = slot.get("template", "")
+            name = template_key.split("/")[-1] if "/" in template_key else template_key
             configured_taps = int(slot.get("taps", 5))
             fixed_bar_x = slot.get("bar_x", 0)
 
             if fixed_bar_x:
                 slot_cx = int(fixed_bar_x)
                 slot_cy = int(slot.get("bar_y", bar_center_y))
-                logger.info(f"[DEPLOY] '{template_key}' at ({slot_cx},{slot_cy}) [fixed], deploying {configured_taps}×")
+                logger.info(f"[DEPLOY] {name:<22} ×{configured_taps}  ({slot_cx},{slot_cy})  [fixed]")
             else:
                 if bar_gray is None:
                     bar_gray = cv2.cvtColor(bar_crop, cv2.COLOR_BGR2GRAY)
                 template = vision.cache.get(template_key)
                 if template is None:
-                    logger.debug(f"[DEPLOY] '{template_key}' not in cache, skipping")
+                    logger.debug(f"[DEPLOY] SKIP  {name}: not in cache")
                     continue
 
                 default_threshold = 0.40 if "siege" in template_key else 0.50
@@ -149,14 +150,14 @@ class BattleScreen(BaseScreen):
                     bar_gray, template, threshold=slot_threshold, scales=SLOT_ICON_SCALES,
                 )
                 if result_map is None or scaled is None:
-                    logger.debug(f"[DEPLOY] '{template_key}' not found in bar (score={score:.3f})")
+                    logger.debug(f"[DEPLOY] MISS  {name}: conf={score:.2f} < thr={slot_threshold:.2f}")
                     continue
 
                 _, _, _, max_loc = cv2.minMaxLoc(result_map)
                 th, tw = scaled.shape[:2]
                 slot_cx = int(max_loc[0] + tw // 2 + bx1)
                 slot_cy = int(max_loc[1] + th // 2 + by1)
-                logger.info(f"[DEPLOY] '{template_key}' at ({slot_cx},{slot_cy}) score={score:.2f}, deploying {configured_taps}×")
+                logger.info(f"[DEPLOY] {name:<22} ×{configured_taps}  ({slot_cx},{slot_cy})  conf={score:.2f}")
 
             debug_clicks.append((template_key, slot_cx, slot_cy))
             self.ui_manager.click(slot_cx, slot_cy)
