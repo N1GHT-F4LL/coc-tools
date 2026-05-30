@@ -37,3 +37,4 @@ coc_bot/logs/debug/
 
 # Claude specific files
 .claude/settings.local.json
+.claude/worktrees/
