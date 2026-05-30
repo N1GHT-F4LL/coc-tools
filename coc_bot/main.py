@@ -8,7 +8,7 @@ from datetime import datetime
 from core.humanize import Humanize
 from core.ui_manager import UIManager
 from core.vision import vision
-from core.device import bootstrap_device
+from core.bootstrap import bootstrap_device
 from core.logging_utils import setup_logging
 from core.ocr import warmup_ocr
 from screens.home_screen import HomeScreen
@@ -80,6 +80,10 @@ def run_bot(settings, stop_event=None, non_interactive=False):
     while time.time() < deadline:
         if home_screen.is_current_screen():
             logger.info("Home screen detected.")
+            # Dismiss any startup banners (Welcome Back, events, etc.)
+            for _ in range(4):
+                home_screen.close_popups()
+                ui_manager._poll_sleep(0.6)
             logger.info("Zooming out for full village view...")
             device.pinch('out', span_pixels=600, repeats=1)
             ui_manager._poll_sleep(1.0)

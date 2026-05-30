@@ -74,7 +74,7 @@
     },
     "deploy": {
       "mode": "slot",
-      "active_scenario": "Thrower",
+      "active_scenario": "Thrower_",
       "troop_bar_region": [
         0,
         730,

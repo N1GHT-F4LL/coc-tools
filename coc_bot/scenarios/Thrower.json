@@ -1,229 +1,371 @@
 {
   "name": "Thrower",
-  "slots": [
+  "variants": [
     {
-      "template": "units/heroes/barbarian_king",
-      "taps": 1,
-      "strategy": "points",
-      "points": [
-        [
-          142,
-          428
-        ]
-      ]
-    },
-    {
-      "strategy": "delay",
-      "seconds": 2
-    },
-    {
-      "template": "units/siege/log_launcher",
-      "taps": 1,
-      "strategy": "points",
-      "points": [
-        [
-          184,
-          425
-        ]
-      ]
-    },
-    {
-      "strategy": "delay",
-      "seconds": 2
-    },
-    {
-      "template": "units/troops/thrower",
-      "taps": 16,
-      "strategy": "line",
-      "x1": 194,
-      "y1": 411,
-      "x2": 278,
-      "y2": 359
-    },
-    {
-      "template": "units/troops/healer",
-      "taps": 6,
-      "strategy": "line",
-      "x1": 130,
-      "y1": 369,
-      "x2": 247,
-      "y2": 295
-    },
-    {
-      "template": "units/troops/apprentice_warden",
-      "taps": 6,
-      "strategy": "line",
-      "x1": 194,
-      "y1": 411,
-      "x2": 278,
-      "y2": 359
-    },
-    {
-      "template": "units/troops/archer",
-      "taps": 12,
-      "strategy": "points",
-      "points": [
-        [
-          164,
-          425
-        ]
-      ]
-    },
-    {
-      "template": "units/heroes/archer_queen",
-      "taps": 1,
-      "strategy": "points",
-      "points": [
-        [
-          148,
-          407
-        ]
-      ]
-    },
-    {
-      "template": "units/spells/totem",
-      "taps": 2,
-      "strategy": "points",
-      "points": [
-        [
-          566,
-          334
-        ],
-        [
-          563,
-          453
-        ]
-      ]
-    },
-    {
-      "template": "units/heroes/grand_warden",
-      "taps": 1,
-      "strategy": "points",
-      "points": [
-        [
-          148,
-          407
-        ]
-      ]
-    },
-    {
-      "template": "units/heroes/royal_champion",
-      "taps": 1,
-      "strategy": "points",
-      "points": [
-        [
-          148,
-          407
-        ]
-      ]
-    },
-    {
-      "strategy": "delay",
-      "seconds": 6
-    },
-    {
-      "template": "units/heroes/barbarian_king",
-      "taps": 1,
-      "strategy": "points",
-      "points": [
-        [
-          184,
-          425
-        ]
-      ]
-    },
-    {
-      "template": "units/spells/totem",
-      "taps": 3,
-      "strategy": "points",
-      "points": [
-        [
-          675,
-          224
-        ],
-        [
-          793,
-          379
-        ],
-        [
-          725,
-          581
-        ]
-      ]
-    },
-    {
-      "strategy": "delay",
-      "seconds": 2
-    },
-    {
-      "template": "units/heroes/archer_queen",
-      "taps": 1,
-      "strategy": "points",
-      "points": [
-        [
-          184,
-          425
-        ]
-      ]
-    },
-    {
-      "strategy": "delay",
-      "seconds": 1
-    },
-    {
-      "template": "units/spells/totem",
-      "taps": 2,
-      "strategy": "points",
-      "points": [
-        [
-          898,
-          318
-        ],
-        [
-          942,
-          430
-        ]
-      ]
-    },
-    {
-      "template": "units/spells/rage",
-      "taps": 2,
-      "strategy": "points",
-      "points": [
-        [
-          675,
-          300
-        ],
-        [
-          751,
-          492
-        ]
-      ]
-    },
-    {
-      "template": "units/heroes/royal_champion",
-      "taps": 1,
-      "strategy": "points",
-      "points": [
-        [
-          184,
-          425
-        ]
-      ]
-    },
-    {
-      "strategy": "delay",
-      "seconds": 1
-    },
-    {
-      "template": "units/heroes/grand_warden",
-      "taps": 1,
-      "strategy": "points",
-      "points": [
-        [
-          184,
-          425
-        ]
+      "name": "Tr\u00e1i",
+      "weight": 1,
+      "nodes": [
+        {
+          "id": "bk",
+          "label": "BK Deploy",
+          "type": "hero",
+          "after": [],
+          "template": "units/heroes/barbarian_king",
+          "taps": 1,
+          "strategy": "points",
+          "points": [
+            [
+              142,
+              428
+            ]
+          ]
+        },
+        {
+          "id": "wait_siege",
+          "label": "Wait 2s",
+          "type": "delay",
+          "after": [
+            "bk"
+          ],
+          "seconds": 2,
+          "strategy": "delay"
+        },
+        {
+          "id": "log",
+          "label": "Log Launcher",
+          "type": "siege",
+          "after": [
+            "wait_siege"
+          ],
+          "template": "units/siege/log_launcher",
+          "taps": 1,
+          "strategy": "points",
+          "points": [
+            [
+              184,
+              425
+            ]
+          ]
+        },
+        {
+          "id": "wait_wave",
+          "label": "Wait 2s",
+          "type": "delay",
+          "after": [
+            "log"
+          ],
+          "seconds": 2,
+          "strategy": "delay"
+        },
+        {
+          "id": "thrower",
+          "label": "Thrower \u00d716",
+          "type": "troop",
+          "after": [
+            "wait_wave"
+          ],
+          "template": "units/troops/thrower",
+          "taps": 16,
+          "strategy": "line",
+          "x1": 1213,
+          "y1": 267,
+          "x2": 1015,
+          "y2": 120
+        },
+        {
+          "id": "healer",
+          "label": "Healer \u00d76",
+          "type": "troop",
+          "after": [
+            "wait_wave"
+          ],
+          "template": "units/troops/healer",
+          "taps": 6,
+          "strategy": "line",
+          "x1": 1154,
+          "y1": 195,
+          "x2": 1056,
+          "y2": 145
+        },
+        {
+          "id": "archer",
+          "label": "Archer \u00d712",
+          "type": "troop",
+          "after": [
+            "wait_wave"
+          ],
+          "template": "units/troops/archer",
+          "taps": 12,
+          "strategy": "points",
+          "x1": 300,
+          "y1": 760,
+          "x2": 1300,
+          "y2": 760,
+          "points": [
+            [
+              164,
+              425
+            ],
+            [
+              1078,
+              160
+            ]
+          ]
+        },
+        {
+          "id": "aq_deploy",
+          "label": "Queen",
+          "type": "hero",
+          "after": [
+            "thrower",
+            "healer",
+            "archer"
+          ],
+          "template": "units/heroes/archer_queen",
+          "taps": 1,
+          "strategy": "points",
+          "points": [
+            [
+              148,
+              407
+            ]
+          ]
+        },
+        {
+          "id": "totem1",
+          "label": "Totem \u00d72",
+          "type": "spell",
+          "after": [
+            "thrower",
+            "healer",
+            "archer"
+          ],
+          "template": "units/spells/totem",
+          "taps": 2,
+          "strategy": "points",
+          "points": [
+            [
+              874,
+              243
+            ],
+            [
+              1021,
+              358
+            ]
+          ]
+        },
+        {
+          "id": "gw_deploy",
+          "label": "Qu\u1ea3n gi\u00e1o",
+          "type": "hero",
+          "after": [
+            "aq_deploy"
+          ],
+          "template": "units/heroes/grand_warden",
+          "taps": 1,
+          "strategy": "points",
+          "points": [
+            [
+              148,
+              407
+            ]
+          ]
+        },
+        {
+          "id": "rc_deploy",
+          "label": "RC Deploy",
+          "type": "hero",
+          "after": [
+            "gw_deploy"
+          ],
+          "template": "units/heroes/royal_champion",
+          "taps": 1,
+          "strategy": "points",
+          "points": [
+            [
+              148,
+              407
+            ]
+          ]
+        },
+        {
+          "id": "wait_hero",
+          "label": "Wait 6s",
+          "type": "delay",
+          "after": [
+            "rc_deploy",
+            "totem1"
+          ],
+          "seconds": 6,
+          "strategy": "delay"
+        },
+        {
+          "id": "bk_ability",
+          "label": "BK Ability",
+          "type": "hero",
+          "after": [
+            "wait_hero"
+          ],
+          "template": "units/heroes/barbarian_king",
+          "taps": 1,
+          "strategy": "points",
+          "points": [
+            [
+              184,
+              425
+            ]
+          ]
+        },
+        {
+          "id": "totem2",
+          "label": "Totem \u00d73",
+          "type": "spell",
+          "after": [
+            "wait_hero"
+          ],
+          "template": "units/spells/totem",
+          "taps": 3,
+          "strategy": "points",
+          "points": [
+            [
+              762,
+              231
+            ],
+            [
+              878,
+              340
+            ],
+            [
+              1054,
+              484
+            ]
+          ]
+        },
+        {
+          "id": "wait_aq",
+          "label": "Wait 2s",
+          "type": "delay",
+          "after": [
+            "bk_ability",
+            "totem2"
+          ],
+          "seconds": 2,
+          "strategy": "delay"
+        },
+        {
+          "id": "aq_ability",
+          "label": "AQ Ability",
+          "type": "hero",
+          "after": [
+            "wait_aq"
+          ],
+          "template": "units/heroes/archer_queen",
+          "taps": 1,
+          "strategy": "points",
+          "points": [
+            [
+              184,
+              425
+            ]
+          ]
+        },
+        {
+          "id": "wait_spells",
+          "label": "Wait 1s",
+          "type": "delay",
+          "after": [
+            "aq_ability"
+          ],
+          "seconds": 1,
+          "strategy": "delay"
+        },
+        {
+          "id": "totem3",
+          "label": "Totem \u00d72",
+          "type": "spell",
+          "after": [
+            "wait_spells"
+          ],
+          "template": "units/spells/totem",
+          "taps": 2,
+          "strategy": "points",
+          "points": [
+            [
+              760,
+              328
+            ],
+            [
+              867,
+              454
+            ]
+          ]
+        },
+        {
+          "id": "rage",
+          "label": "Rage \u00d72",
+          "type": "spell",
+          "after": [
+            "wait_spells"
+          ],
+          "template": "units/spells/rage",
+          "taps": 2,
+          "strategy": "points",
+          "points": [
+            [
+              675,
+              300
+            ],
+            [
+              751,
+              492
+            ]
+          ]
+        },
+        {
+          "id": "rc_ability",
+          "label": "RC Ability",
+          "type": "hero",
+          "after": [
+            "totem3",
+            "rage"
+          ],
+          "template": "units/heroes/royal_champion",
+          "taps": 1,
+          "strategy": "points",
+          "points": [
+            [
+              184,
+              425
+            ]
+          ]
+        },
+        {
+          "id": "wait_gw",
+          "label": "Wait 1s",
+          "type": "delay",
+          "after": [
+            "rc_ability"
+          ],
+          "seconds": 1,
+          "strategy": "delay"
+        },
+        {
+          "id": "gw_ability",
+          "label": "GW Ability",
+          "type": "hero",
+          "after": [
+            "wait_gw"
+          ],
+          "template": "units/heroes/grand_warden",
+          "taps": 1,
+          "strategy": "points",
+          "points": [
+            [
+              184,
+              425
+            ]
+          ]
+        }
       ]
     }
   ]

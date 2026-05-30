@@ -1,0 +1,67 @@
+{
+  "name": "Thrower_",
+  "variants": [
+    {
+      "name": "Default",
+      "weight": 1,
+      "nodes": [
+        {
+          "id": "n0",
+          "label": "King",
+          "after": [],
+          "delay": 0,
+          "slots": [],
+          "template": "units/siege/battle_blimp",
+          "taps": 5,
+          "strategy": "points",
+          "x1": 300,
+          "y1": 760,
+          "x2": 1300,
+          "y2": 760,
+          "points": [
+            [
+              1541,
+              432
+            ]
+          ],
+          "type": "siege"
+        },
+        {
+          "id": "n1",
+          "label": "Node 2",
+          "after": [
+            "n0"
+          ],
+          "delay": 0,
+          "slots": [],
+          "type": "troop",
+          "template": "units/troops/apprentice_warden",
+          "taps": 5,
+          "strategy": "points",
+          "x1": 300,
+          "y1": 760,
+          "x2": 1300,
+          "y2": 760,
+          "points": []
+        },
+        {
+          "id": "n2",
+          "label": "Node 3",
+          "after": [
+            "n1"
+          ],
+          "delay": 0,
+          "slots": [],
+          "template": "units/troops/apprentice_warden",
+          "taps": 5,
+          "x1": 300,
+          "y1": 760,
+          "x2": 1300,
+          "y2": 760,
+          "type": "troop",
+          "strategy": "line"
+        }
+      ]
+    }
+  ]
+}

@@ -13,13 +13,20 @@ class BaseScreen:
 
     def close_popups(self):
         logger.debug("Quick scan for popups...")
+        POPUP_BUTTONS = [
+            "buttons/popup/btn_close",
+            "buttons/popup/btn_okay",
+            "btn_okay",
+            "btn_ok",
+        ]
         closed_any = False
-
-        for btn in ["buttons/popup/btn_close", "btn_okay", "btn_ok"]:
+        for btn in POPUP_BUTTONS:
+            if btn not in vision.cache:
+                continue
             if self.ui_manager.click_if_exists_quick(btn, timeout=0.2):
+                logger.info(f"Closed popup: {btn}")
+                self.ui_manager._poll_sleep(0.4)
                 closed_any = True
-                logger.info(f"Closed popup button: {btn}")
-
         if not closed_any:
             logger.debug("No popups detected")
 
